@@ -19,8 +19,9 @@ object RecentApps {
         val stats = try {
             usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, now - 24L * 3_600_000L, now)
         } catch (_: SecurityException) {
-            return emptyList()
-        } ?: return emptyList()
+            null
+        }
+        if (stats == null) return emptyList()
 
         val pm = c.packageManager
         val home = pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), 0)
