@@ -2,6 +2,9 @@ package com.frostbyte.gamebooster.overlay
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
+import android.media.AudioManager
+import android.provider.Settings
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.PixelFormat
@@ -86,6 +89,7 @@ class PanelOverlay(base: Context, private val cb: Callbacks) {
         fun lockTouch()
         fun stopGaming()
         fun openApp()
+        fun boost()
         fun afk(): Boolean
         fun toggleAfk()
         fun capture(mode: String)
@@ -373,7 +377,8 @@ class PanelOverlay(base: Context, private val cb: Callbacks) {
         val items = mutableListOf<TextView>()
         btnRec = null
         btnAfk = null
-        if ("lock" in sc) items += button("\uD83D\uDD12 Touch Lock", true) { cb.lockTouch() }
+        if ("boost" in sc) items += button("\uD83D\uDE80 Boost", true) { cb.boost() }
+        if ("lock" in sc) items += button("\uD83D\uDD12 Touch Lock") { cb.lockTouch() }
         if ("shot" in sc) items += button("\uD83D\uDCF8 Screenshot") { cb.capture("shot") }
         if ("rec" in sc) {
             val b = button("\uD83C\uDFA5 Record") {
@@ -386,6 +391,14 @@ class PanelOverlay(base: Context, private val cb: Callbacks) {
             val b = button("\uD83C\uDF19 AFK") { cb.toggleAfk(); refresh() }
             btnAfk = b
             items += b
+        }
+        if ("vol" in sc) items += button("\uD83D\uDD0A Volume") {
+            (ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager)
+                .adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_SAME, AudioManager.FLAG_SHOW_UI)
+        }
+        if ("net" in sc) items += button("\uD83D\uDCF6 Network") {
+            hide()
+            Perms.open(ctx, Intent(Settings.Panel.ACTION_INTERNET_CONNECTIVITY))
         }
         if ("settings" in sc) items += button("\u2699 Settings") { cb.openApp() }
         items.chunked(2).forEachIndexed { idx, pair ->
@@ -438,7 +451,18 @@ class PanelOverlay(base: Context, private val cb: Callbacks) {
         tvProfileLine.text = "Gaming profile active \u00B7 ${profile.label}"
         chips.forEach { (gp, view) -> styleChip(view, gp == profile) }
         tvTip.text = GameTips.tip(cb.gameId, profile)
-        tvPowerTip.visibility = if (profile == GameProfile.BATTERY && !DeviceStats.powerSave(ctx)) View.VISIBLE else View.GONE
+        val saverOn = DeviceStats.powerSave(ctx)
+        when {
+            profile == GameProfile.BATTERY && !saverOn -> {
+                tvPowerTip.text = "Tip: turn on Android Battery Saver (tap)"
+                tvPowerTip.visibility = View.VISIBLE
+            }
+            profile != GameProfile.BATTERY && saverOn -> {
+                tvPowerTip.text = "Battery Saver is on and slows the CPU. Turn it off for best performance (tap)"
+                tvPowerTip.visibility = View.VISIBLE
+            }
+            else -> tvPowerTip.visibility = View.GONE
+        }
         when (th) {
             ThermalLevel.HOT -> { tvHeat.text = "Device is getting hot. Lower graphics/FPS or take a break."; tvHeat.setTextColor(C.hot); tvHeat.visibility = View.VISIBLE }
             ThermalLevel.CRITICAL -> { tvHeat.text = "Critical heat. Stop gaming and let the device cool."; tvHeat.setTextColor(C.crit); tvHeat.visibility = View.VISIBLE }

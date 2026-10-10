@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.sp
 import com.frostbyte.gamebooster.data.GameProfile
 import com.frostbyte.gamebooster.data.GameTips
 import com.frostbyte.gamebooster.data.Games
+import com.frostbyte.gamebooster.data.InstalledGame
 import com.frostbyte.gamebooster.data.Prefs
 import com.frostbyte.gamebooster.data.SessionStore
 import com.frostbyte.gamebooster.system.Perms
@@ -50,7 +51,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 @Composable
-fun GamesScreen() {
+fun GamesScreen(onGuidedClean: (InstalledGame) -> Unit) {
     val context = LocalContext.current
     val resume = rememberResumeTick()
     var version by remember { mutableIntStateOf(0) }
@@ -141,11 +142,13 @@ fun GamesScreen() {
     }
 
     boostFor?.let { pkg ->
-        games.firstOrNull { it.packageName == pkg }?.let { g -> BoostDialog(g) { boostFor = null } }
+        games.firstOrNull { it.packageName == pkg }?.let { g ->
+            BoostDialog(g, onGuided = { boostFor = null; onGuidedClean(g) }) { boostFor = null }
+        }
     }
 
     if (showAdd) {
-        val candidates by produceState<List<com.frostbyte.gamebooster.data.InstalledGame>?>(null) {
+        val candidates by produceState<List<InstalledGame>?>(null) {
             value = withContext(Dispatchers.Default) { Games.launcherApps(context) }
         }
         AlertDialog(

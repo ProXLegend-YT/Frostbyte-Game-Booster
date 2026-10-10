@@ -57,6 +57,10 @@ fun SettingsScreen() {
     var cards by remember { mutableStateOf(Prefs.panelCards(context)) }
     var shortcuts by remember { mutableStateOf(Prefs.shortcuts(context)) }
     var amoled by remember { mutableStateOf(Prefs.amoled(context)) }
+    var sweep by remember { mutableStateOf(Prefs.sweepEnabled(context)) }
+    var syncPause by remember { mutableStateOf(Prefs.pauseSync(context)) }
+    var dim by remember { mutableStateOf(Prefs.lowerBrightness(context)) }
+    var dimPct by remember { mutableFloatStateOf(Prefs.brightnessPct(context).toFloat()) }
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -127,8 +131,8 @@ fun SettingsScreen() {
         SectionTitle("Panel shortcuts")
         GlassCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp)) {
-                listOf("lock" to "Touch Lock", "shot" to "Screenshot", "rec" to "Screen record", "afk" to "AFK mode",
-                    "settings" to "Settings").forEach { (id, label) ->
+                listOf("boost" to "Boost (free memory)", "lock" to "Touch Lock", "shot" to "Screenshot", "rec" to "Screen record", "afk" to "AFK mode",
+                    "vol" to "Volume", "net" to "Network settings", "settings" to "Settings").forEach { (id, label) ->
                     SwitchRow(label, "", id in shortcuts) { on ->
                         shortcuts = if (on) shortcuts + id else shortcuts - id
                         Prefs.setShortcuts(context, shortcuts); Prefs.setPreset(context, "custom"); preset = "custom"
@@ -144,6 +148,30 @@ fun SettingsScreen() {
                     amoled = on
                     Prefs.setAmoled(context, on)
                     (context as? android.app.Activity)?.recreate()
+                }
+            }
+        }
+
+        SectionTitle("Gaming extras")
+        GlassCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(14.dp)) {
+                SwitchRow("End background processes on boost", "Asks Android to end other apps' background processes before and just after launch, and on every Boost tap. Shows measured memory.", sweep) {
+                    sweep = it; Prefs.setSweepEnabled(context, it)
+                }
+                SwitchRow("Pause background sync while gaming", "Turns off automatic account sync during the game and restores your setting afterwards.", syncPause) {
+                    syncPause = it; Prefs.setPauseSync(context, it)
+                }
+                SwitchRow("Lower brightness while gaming", "Less heat, longer play. Needs 'Modify system settings' (Permissions above). Your brightness is restored afterwards.", dim) {
+                    dim = it; Prefs.setLowerBrightness(context, it)
+                }
+                if (dim) {
+                    Text("Brightness while gaming: ${dimPct.toInt()}%", color = Frost.Text, fontSize = 13.sp)
+                    Slider(
+                        value = dimPct, onValueChange = { dimPct = it },
+                        onValueChangeFinished = { Prefs.setBrightnessPct(context, dimPct.toInt()) },
+                        valueRange = 15f..90f,
+                        colors = SliderDefaults.colors(thumbColor = Frost.Cyan, activeTrackColor = Frost.Cyan, inactiveTrackColor = Frost.CardEdge),
+                    )
                 }
             }
         }

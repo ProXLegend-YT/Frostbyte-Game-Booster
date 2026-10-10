@@ -34,9 +34,12 @@ import com.frostbyte.gamebooster.data.Session
 import com.frostbyte.gamebooster.data.SessionStore
 import com.frostbyte.gamebooster.overlay.PanelOverlay
 import com.frostbyte.gamebooster.overlay.TouchLockOverlay
+import com.frostbyte.gamebooster.system.BrightnessController
 import com.frostbyte.gamebooster.system.DeviceStats
 import com.frostbyte.gamebooster.system.DndController
+import com.frostbyte.gamebooster.system.MemoryBoost
 import com.frostbyte.gamebooster.system.Perms
+import com.frostbyte.gamebooster.system.SyncController
 import com.frostbyte.gamebooster.system.ThermalLevel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -46,6 +49,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Gaming Mode. Runs only while you play: shows the "Game Booster" notification, owns the right-side panel,
@@ -165,6 +169,12 @@ class GamingService : Service() {
         goForeground()
         applyBoost()
         startMonitor()
+        if (Prefs.sweepEnabled(this)) {
+            scope.launch {
+                delay(10_000)
+                if (running) MemoryBoost.sweep(this@GamingService, setOf(gamePkg))
+            }
+        }
         if (afk) setAfk(true, false)
     }
 
@@ -199,6 +209,8 @@ class GamingService : Service() {
         locked = false
         setKeepAwake(false)
         DndController.restore(this)
+        BrightnessController.restore(this)
+        SyncController.restore(this)
 
         val end = System.currentTimeMillis()
         if (end - startMs >= 20_000) {
@@ -228,11 +240,27 @@ class GamingService : Service() {
         if (eff.blockNotifications || eff.blockCalls) parts += if (dndOk) "Do Not Disturb on" else "Do Not Disturb needs permission"
         if (afk) parts += "AFK mode"
         if (eff.keepAwake || afk) parts += if (awakeView != null) "screen stays awake" else "screen-awake needs overlay permission"
+        if (Prefs.lowerBrightness(this)) {
+            parts += if (BrightnessController.apply(this, Prefs.brightnessPct(this))) "brightness ${Prefs.brightnessPct(this)}%" else "brightness needs 'Modify system settings'"
+        } else {
+            BrightnessController.restore(this)
+        }
+        if (Prefs.pauseSync(this)) {
+            parts += if (SyncController.pause(this)) "background sync paused" else "sync pause failed"
+        } else {
+            SyncController.restore(this)
+        }
         return parts.joinToString(" \u00B7 ")
     }
 
+    /** Panel/notification "Boost": end background processes again + re-apply your gaming settings. */
     private fun boostNow() {
-        toast(applyBoost())
+        scope.launch {
+            val r = if (Prefs.sweepEnabled(this@GamingService)) MemoryBoost.sweep(this@GamingService, setOf(gamePkg)) else null
+            withContext(Dispatchers.Main) {
+                if (running) toast(applyBoost() + (r?.let { "\n" + it.summary() } ?: ""))
+            }
+        }
     }
 
     private fun setKeepAwake(on: Boolean) {
@@ -282,6 +310,7 @@ class GamingService : Service() {
             panel?.hide()
             Perms.open(this@GamingService, Intent(this@GamingService, MainActivity::class.java))
         }
+        override fun boost() = this@GamingService.boostNow()
         override fun afk(): Boolean = afk
         override fun toggleAfk() = setAfk(!afk, true)
         override fun capture(mode: String) {

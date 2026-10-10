@@ -43,6 +43,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import com.frostbyte.gamebooster.R
 import com.frostbyte.gamebooster.data.Games
+import com.frostbyte.gamebooster.data.InstalledGame
 import com.frostbyte.gamebooster.data.SessionStore
 import com.frostbyte.gamebooster.service.GamingService
 import com.frostbyte.gamebooster.system.DeviceStats
@@ -51,7 +52,12 @@ import com.frostbyte.gamebooster.util.Fmt
 import kotlinx.coroutines.delay
 
 @Composable
-fun HomeScreen(onOpenGames: () -> Unit, onOpenAfk: () -> Unit, onOpenManager: () -> Unit) {
+fun HomeScreen(
+    onOpenGames: () -> Unit,
+    onOpenAfk: () -> Unit,
+    onOpenManager: () -> Unit,
+    onGuidedClean: (InstalledGame) -> Unit,
+) {
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
     val resume = rememberResumeTick()
@@ -183,5 +189,7 @@ fun HomeScreen(onOpenGames: () -> Unit, onOpenAfk: () -> Unit, onOpenManager: ()
         }
     }
 
-    if (showBoost && game != null) BoostDialog(game) { showBoost = false }
+    if (showBoost && game != null) {
+        BoostDialog(game, onGuided = { showBoost = false; onGuidedClean(game) }) { showBoost = false }
+    }
 }

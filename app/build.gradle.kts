@@ -12,15 +12,15 @@ android {
         applicationId = "com.frostbyte.gamebooster"
         minSdk = 29          // Android 10 (Galaxy A7 2018 max)
         targetSdk = 34
-        versionCode = 3
-        versionName = "0.2.1-stage9-fix"
+        versionCode = 5
+        versionName = "1.1.0-turbo"
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            isMinifyEnabled = false
+            // Signed with the auto-generated debug key so the APK installs on your phone (sideloading).
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 

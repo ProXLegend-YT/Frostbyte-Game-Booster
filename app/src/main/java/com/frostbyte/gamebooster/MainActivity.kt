@@ -30,9 +30,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.frostbyte.gamebooster.data.InstalledGame
 import com.frostbyte.gamebooster.data.Prefs
+import com.frostbyte.gamebooster.service.GamingService
+import com.frostbyte.gamebooster.system.BrightnessController
+import com.frostbyte.gamebooster.system.DndController
+import com.frostbyte.gamebooster.system.SyncController
 import com.frostbyte.gamebooster.ui.AfkScreen
 import com.frostbyte.gamebooster.ui.AppManagerScreen
+import com.frostbyte.gamebooster.ui.CleanAndPlayScreen
 import com.frostbyte.gamebooster.ui.GamesScreen
 import com.frostbyte.gamebooster.ui.HistoryScreen
 import com.frostbyte.gamebooster.ui.HomeScreen
@@ -44,6 +50,12 @@ import com.frostbyte.gamebooster.ui.theme.FrostByteTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // if the app was killed mid-game, put the user's own settings back
+        if (GamingService.activeGameName == null) {
+            DndController.restore(this)
+            BrightnessController.restore(this)
+            SyncController.restore(this)
+        }
         Frost.applyAmoled(Prefs.amoled(this))
         window.setBackgroundDrawable(ColorDrawable(Frost.Bg.toArgb()))
         setContent { FrostByteTheme { FrostByteApp() } }
@@ -64,7 +76,8 @@ private val tabs = listOf(
 fun FrostByteApp() {
     var selected by remember { mutableIntStateOf(0) }
     var sub by remember { mutableStateOf<String?>(null) }   // "afk" | "manager"
-    BackHandler(enabled = sub != null) { sub = null }
+    var cleanGame by remember { mutableStateOf<InstalledGame?>(null) }
+    BackHandler(enabled = sub != null || cleanGame != null) { sub = null; cleanGame = null }
     Scaffold(
         containerColor = Frost.Bg,
         bottomBar = {
@@ -88,12 +101,14 @@ fun FrostByteApp() {
         },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding).safeDrawingPadding()) {
+            val cg = cleanGame
             when {
+                cg != null -> CleanAndPlayScreen(cg) { cleanGame = null }
                 sub == "afk" -> AfkScreen { sub = null }
                 sub == "manager" -> AppManagerScreen { sub = null }
                 else -> when (selected) {
-                    0 -> HomeScreen(onOpenGames = { selected = 1 }, onOpenAfk = { sub = "afk" }, onOpenManager = { sub = "manager" })
-                    1 -> GamesScreen()
+                    0 -> HomeScreen(onOpenGames = { selected = 1 }, onOpenAfk = { sub = "afk" }, onOpenManager = { sub = "manager" }, onGuidedClean = { cleanGame = it })
+                    1 -> GamesScreen(onGuidedClean = { cleanGame = it })
                     2 -> PerformanceScreen()
                     3 -> HistoryScreen()
                     else -> SettingsScreen()

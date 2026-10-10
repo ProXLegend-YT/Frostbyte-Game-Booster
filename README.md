@@ -12,8 +12,11 @@
 8. AFK Gaming Mode (keep awake, timer, monitoring, touch lock, auto-stop on low battery / critical heat)
 9. Background App Manager (recent apps, guided Force-stop clean-up, measured memory change)
 
+10. Release build on tags (v1.0.0 -> GitHub Release with debug + release APK), Volume and Network shortcuts
+11. Turbo: memory sweep before launch (measured), Clean & Play guided Force-stop flow, Roblox Turbo defaults, optional brightness/sync extras, Battery Saver and heat warnings
+
 ## Next
-10. Polish, lint cleanup, release build + tags, on-device test fixes
+On-device fixes from your A7 testing
 
 ## Honest by design
 No fake FPS, no fake RAM boost, no root, no hidden APIs, no auto-play/macros. Missing data shows "unavailable".

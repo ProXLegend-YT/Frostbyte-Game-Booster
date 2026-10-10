@@ -7,7 +7,7 @@ object Prefs {
     private fun sp(c: Context) = c.applicationContext.getSharedPreferences("frostbyte", Context.MODE_PRIVATE)
 
     fun profile(c: Context, gameId: String): GameProfile =
-        GameProfile.entries.firstOrNull { it.name == sp(c).getString("profile_$gameId", null) } ?: GameProfile.BALANCED
+        GameProfile.entries.firstOrNull { it.name == sp(c).getString("profile_$gameId", null) } ?: (if (gameId == "roblox") GameProfile.PERFORMANCE else GameProfile.BALANCED)
 
     fun setProfile(c: Context, gameId: String, p: GameProfile) {
         sp(c).edit().putString("profile_$gameId", p.name).apply()
@@ -45,7 +45,7 @@ object Prefs {
 
     // ---- panel customisation ----
     val ALL_CARDS: Set<String> = setOf("perf", "thermal", "mem", "batt", "net", "block")
-    val ALL_SHORTCUTS: Set<String> = setOf("lock", "shot", "rec", "afk", "settings")
+    val ALL_SHORTCUTS: Set<String> = setOf("boost", "lock", "shot", "rec", "afk", "vol", "net", "settings")
 
     fun panelCards(c: Context): Set<String> = HashSet(sp(c).getStringSet("panel_cards", null) ?: ALL_CARDS)
     fun setPanelCards(c: Context, s: Set<String>) { sp(c).edit().putStringSet("panel_cards", HashSet(s)).apply() }
@@ -74,4 +74,26 @@ object Prefs {
     fun setAfkStopBattery(c: Context, v: Int) { sp(c).edit().putInt("afk_stop_batt", v).apply() }
     fun afkStopHot(c: Context): Boolean = sp(c).getBoolean("afk_stop_hot", true)
     fun setAfkStopHot(c: Context, v: Boolean) { sp(c).edit().putBoolean("afk_stop_hot", v).apply() }
+
+    // ---- gaming extras (all opt-in, always restored) ----
+    fun sweepEnabled(c: Context): Boolean = sp(c).getBoolean("sweep", true)
+    fun setSweepEnabled(c: Context, v: Boolean) { sp(c).edit().putBoolean("sweep", v).apply() }
+    fun pauseSync(c: Context): Boolean = sp(c).getBoolean("pause_sync", false)
+    fun setPauseSync(c: Context, v: Boolean) { sp(c).edit().putBoolean("pause_sync", v).apply() }
+    fun lowerBrightness(c: Context): Boolean = sp(c).getBoolean("low_bright", false)
+    fun setLowerBrightness(c: Context, v: Boolean) { sp(c).edit().putBoolean("low_bright", v).apply() }
+    fun brightnessPct(c: Context): Int = sp(c).getInt("bright_pct", 50)
+    fun setBrightnessPct(c: Context, v: Int) { sp(c).edit().putInt("bright_pct", v).apply() }
+
+    fun brightOwned(c: Context): Boolean = sp(c).getBoolean("bright_owned", false)
+    fun savedBrightMode(c: Context): Int = sp(c).getInt("bright_mode", 1)
+    fun savedBrightValue(c: Context): Int = sp(c).getInt("bright_value", 128)
+    fun setBright(c: Context, owned: Boolean, mode: Int, value: Int) {
+        sp(c).edit().putBoolean("bright_owned", owned).putInt("bright_mode", mode).putInt("bright_value", value).apply()
+    }
+    fun syncOwned(c: Context): Boolean = sp(c).getBoolean("sync_owned", false)
+    fun savedSync(c: Context): Boolean = sp(c).getBoolean("sync_saved", true)
+    fun setSync(c: Context, owned: Boolean, saved: Boolean) {
+        sp(c).edit().putBoolean("sync_owned", owned).putBoolean("sync_saved", saved).apply()
+    }
 }
