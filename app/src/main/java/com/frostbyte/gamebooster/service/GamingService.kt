@@ -115,6 +115,8 @@ class GamingService : Service() {
     private var lastGameSeen = 0L
     private var lastEventTime = 0L
     private var currentFg: String? = null
+    private var lastThrottle = 0
+    private var lastAutoSweep = 0L
     private var locked = false
     private var afk = false
     private var afkLocked = false
@@ -153,6 +155,8 @@ class GamingService : Service() {
         activeGameName = gameName
         startMs = System.currentTimeMillis()
         lastGameSeen = startMs
+        lastThrottle = 0
+        lastAutoSweep = 0L
         lastEventTime = 0L
         currentFg = null
         locked = false
@@ -211,6 +215,9 @@ class GamingService : Service() {
         DndController.restore(this)
         BrightnessController.restore(this)
         SyncController.restore(this)
+        if (Prefs.devLimitSet(this)) {
+            postAlert("Reset Background process limit", "Developer options > Apps > Background process limit > Standard limit, so your apps behave normally again.")
+        }
 
         val end = System.currentTimeMillis()
         if (end - startMs >= 20_000) {
@@ -381,6 +388,23 @@ class GamingService : Service() {
                 val b = DeviceStats.battery(this@GamingService)
                 b.tempC?.let { t -> tempMax = maxOf(tempMax ?: t, t) }
                 val th = b.thermal
+                val thr = DeviceStats.thermalStatus(this@GamingService)
+                if (thr != lastThrottle) {
+                    val rose = thr > lastThrottle
+                    lastThrottle = thr
+                    if (rose && thr >= 2) {
+                        main.post {
+                            if (running) postAlert("Android is throttling performance", "Throttle level: ${DeviceStats.throttleLabel(thr)}. Lower graphics or take a break so the phone can cool.")
+                        }
+                    }
+                }
+                val mem = DeviceStats.memory(this@GamingService)
+                val nowMs = System.currentTimeMillis()
+                if (Prefs.autoSweep(this@GamingService) && mem.availBytes < mem.totalBytes * 12 / 100 && nowMs - lastAutoSweep > 180_000) {
+                    lastAutoSweep = nowMs
+                    val r = MemoryBoost.sweep(this@GamingService, setOf(gamePkg))
+                    if (r.freedMb >= 20) toast("Memory was low. FrostByte ended background processes (+${r.freedMb} MB).")
+                }
                 if (th != lastThermal) {
                     lastThermal = th
                     main.post {

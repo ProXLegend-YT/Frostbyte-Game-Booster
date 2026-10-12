@@ -56,6 +56,7 @@ fun HomeScreen(
     onOpenGames: () -> Unit,
     onOpenAfk: () -> Unit,
     onOpenManager: () -> Unit,
+    onOpenCoach: () -> Unit,
     onGuidedClean: (InstalledGame) -> Unit,
 ) {
     val context = LocalContext.current
@@ -181,6 +182,7 @@ fun HomeScreen(
             ToolCard("\uD83C\uDF19 AFK Mode", "Stay in game, longer", onOpenAfk, Modifier.weight(1f))
             ToolCard("\uD83E\uDDF9 App Manager", "Close apps before you play", onOpenManager, Modifier.weight(1f))
         }
+        ToolCard("\uD83D\uDE80 Performance Coach", "Finds what is slowing your games, with one-tap fixes", onOpenCoach, Modifier.fillMaxWidth())
 
         SectionTitle("Gaming Statistics")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

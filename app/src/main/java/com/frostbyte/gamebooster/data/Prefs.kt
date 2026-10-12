@@ -96,4 +96,9 @@ object Prefs {
     fun setSync(c: Context, owned: Boolean, saved: Boolean) {
         sp(c).edit().putBoolean("sync_owned", owned).putBoolean("sync_saved", saved).apply()
     }
+
+    fun autoSweep(c: Context): Boolean = sp(c).getBoolean("auto_sweep", true)
+    fun setAutoSweep(c: Context, v: Boolean) { sp(c).edit().putBoolean("auto_sweep", v).apply() }
+    fun devLimitSet(c: Context): Boolean = sp(c).getBoolean("dev_limit_set", false)
+    fun setDevLimitSet(c: Context, v: Boolean) { sp(c).edit().putBoolean("dev_limit_set", v).apply() }
 }

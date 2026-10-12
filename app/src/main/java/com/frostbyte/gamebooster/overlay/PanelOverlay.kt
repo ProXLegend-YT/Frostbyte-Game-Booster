@@ -440,14 +440,23 @@ class PanelOverlay(base: Context, private val cb: Callbacks) {
         btnAfk?.text = if (cb.afk()) "\uD83C\uDF19 AFK: ON" else "\uD83C\uDF19 AFK"
 
         // performance
+        val thr = DeviceStats.thermalStatus(ctx)
         val status = when {
+            thr >= 3 -> "THROTTLED"
             th == ThermalLevel.CRITICAL -> "CRITICAL"
+            thr == 2 -> "THROTTLING"
             th == ThermalLevel.HOT -> "HOT"
             m.usedPercent >= 92 -> "LOW MEMORY"
             else -> "GOOD"
         }
         tvPerfStatus.text = status
-        tvPerfStatus.setTextColor(if (status == "GOOD") C.good else if (status == "HOT" || status == "LOW MEMORY") C.hot else C.crit)
+        tvPerfStatus.setTextColor(
+            when (status) {
+                "GOOD" -> C.good
+                "HOT", "LOW MEMORY", "THROTTLING" -> C.hot
+                else -> C.crit
+            },
+        )
         tvProfileLine.text = "Gaming profile active \u00B7 ${profile.label}"
         chips.forEach { (gp, view) -> styleChip(view, gp == profile) }
         tvTip.text = GameTips.tip(cb.gameId, profile)
@@ -463,15 +472,25 @@ class PanelOverlay(base: Context, private val cb: Callbacks) {
             }
             else -> tvPowerTip.visibility = View.GONE
         }
-        when (th) {
-            ThermalLevel.HOT -> { tvHeat.text = "Device is getting hot. Lower graphics/FPS or take a break."; tvHeat.setTextColor(C.hot); tvHeat.visibility = View.VISIBLE }
-            ThermalLevel.CRITICAL -> { tvHeat.text = "Critical heat. Stop gaming and let the device cool."; tvHeat.setTextColor(C.crit); tvHeat.visibility = View.VISIBLE }
-            else -> tvHeat.visibility = View.GONE
+        val heat: Pair<String, Int>? = when {
+            thr >= 2 -> "Android is throttling the CPU/GPU to cool down. Lower graphics or take a break." to C.crit
+            th == ThermalLevel.CRITICAL -> "Critical heat. Stop gaming and let the device cool." to C.crit
+            th == ThermalLevel.HOT -> "Device is getting hot. Lower graphics/FPS or take a break." to C.hot
+            b.charging && (b.tempC ?: 0f) >= 38f -> "Charging adds heat. Unplug while gaming to run cooler." to C.warm
+            else -> null
+        }
+        if (heat == null) {
+            tvHeat.visibility = View.GONE
+        } else {
+            tvHeat.text = heat.first
+            tvHeat.setTextColor(heat.second)
+            tvHeat.visibility = View.VISIBLE
         }
 
         // thermal
         tvTemp.text = b.tempC?.let { "%.0f\u00B0C".format(it) } ?: "-"
-        tvThermal.text = th?.label ?: "Temperature information unavailable"
+        tvThermal.text = (th?.label ?: "Temperature information unavailable") +
+            (if (thr >= 1) " \u00B7 throttle: ${DeviceStats.throttleLabel(thr)}" else "")
         tvThermal.setTextColor(colorFor(th))
 
         // memory

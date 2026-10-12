@@ -58,6 +58,7 @@ fun SettingsScreen() {
     var shortcuts by remember { mutableStateOf(Prefs.shortcuts(context)) }
     var amoled by remember { mutableStateOf(Prefs.amoled(context)) }
     var sweep by remember { mutableStateOf(Prefs.sweepEnabled(context)) }
+    var autoSweep by remember { mutableStateOf(Prefs.autoSweep(context)) }
     var syncPause by remember { mutableStateOf(Prefs.pauseSync(context)) }
     var dim by remember { mutableStateOf(Prefs.lowerBrightness(context)) }
     var dimPct by remember { mutableFloatStateOf(Prefs.brightnessPct(context).toFloat()) }
@@ -157,6 +158,9 @@ fun SettingsScreen() {
             Column(Modifier.padding(14.dp)) {
                 SwitchRow("End background processes on boost", "Asks Android to end other apps' background processes before and just after launch, and on every Boost tap. Shows measured memory.", sweep) {
                     sweep = it; Prefs.setSweepEnabled(context, it)
+                }
+                SwitchRow("Auto-boost when memory is low", "While you play, if free memory drops under 12%, FrostByte ends background processes again (at most every 3 minutes).", autoSweep) {
+                    autoSweep = it; Prefs.setAutoSweep(context, it)
                 }
                 SwitchRow("Pause background sync while gaming", "Turns off automatic account sync during the game and restores your setting afterwards.", syncPause) {
                     syncPause = it; Prefs.setPauseSync(context, it)

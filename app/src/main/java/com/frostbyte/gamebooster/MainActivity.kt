@@ -40,6 +40,7 @@ import com.frostbyte.gamebooster.ui.AfkScreen
 import com.frostbyte.gamebooster.ui.AppManagerScreen
 import com.frostbyte.gamebooster.ui.CleanAndPlayScreen
 import com.frostbyte.gamebooster.ui.GamesScreen
+import com.frostbyte.gamebooster.ui.PerformanceCoachScreen
 import com.frostbyte.gamebooster.ui.HistoryScreen
 import com.frostbyte.gamebooster.ui.HomeScreen
 import com.frostbyte.gamebooster.ui.PerformanceScreen
@@ -106,10 +107,11 @@ fun FrostByteApp() {
                 cg != null -> CleanAndPlayScreen(cg) { cleanGame = null }
                 sub == "afk" -> AfkScreen { sub = null }
                 sub == "manager" -> AppManagerScreen { sub = null }
+                sub == "coach" -> PerformanceCoachScreen { sub = null }
                 else -> when (selected) {
-                    0 -> HomeScreen(onOpenGames = { selected = 1 }, onOpenAfk = { sub = "afk" }, onOpenManager = { sub = "manager" }, onGuidedClean = { cleanGame = it })
+                    0 -> HomeScreen(onOpenGames = { selected = 1 }, onOpenAfk = { sub = "afk" }, onOpenManager = { sub = "manager" }, onOpenCoach = { sub = "coach" }, onGuidedClean = { cleanGame = it })
                     1 -> GamesScreen(onGuidedClean = { cleanGame = it })
-                    2 -> PerformanceScreen()
+                    2 -> PerformanceScreen(onOpenCoach = { sub = "coach" })
                     3 -> HistoryScreen()
                     else -> SettingsScreen()
                 }
