@@ -98,7 +98,8 @@ fun PerformanceScreen(onOpenCoach: () -> Unit) {
                     "Android throttle: ${DeviceStats.throttleLabel(thr)}" +
                         (headroom?.let { "  \u00B7  thermal headroom ${(it * 100).toInt()}%" } ?: ""),
                     color = if (thr >= 2) Frost.Hot else Frost.Muted, fontSize = 12.sp,
-                )                Text(
+                )
+                Text(
                     when (th) {
                         ThermalLevel.WARM -> "Consider reducing graphics."
                         ThermalLevel.HOT -> "Device is getting hot. Performance may be reduced."
