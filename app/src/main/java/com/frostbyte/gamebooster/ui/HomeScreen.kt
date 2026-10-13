@@ -57,6 +57,8 @@ fun HomeScreen(
     onOpenAfk: () -> Unit,
     onOpenManager: () -> Unit,
     onOpenCoach: () -> Unit,
+    onOpenClicker: () -> Unit,
+    onOpenGhost: () -> Unit,
     onGuidedClean: (InstalledGame) -> Unit,
 ) {
     val context = LocalContext.current
@@ -183,6 +185,10 @@ fun HomeScreen(
             ToolCard("\uD83E\uDDF9 App Manager", "Close apps before you play", onOpenManager, Modifier.weight(1f))
         }
         ToolCard("\uD83D\uDE80 Performance Coach", "Finds what is slowing your games, with one-tap fixes", onOpenCoach, Modifier.fillMaxWidth())
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ToolCard("\uD83D\uDC46 Auto Clicker", "Reconnect for you, 2 clickers", onOpenClicker, Modifier.weight(1f))
+            ToolCard("\uD83D\uDC7B Ghost-Touch Test", "Check for phantom touches", onOpenGhost, Modifier.weight(1f))
+        }
 
         SectionTitle("Gaming Statistics")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -65,3 +65,13 @@ class MemoryBoostTest {
         org.junit.Assert.assertTrue(none.summary().contains("barely changed"))
     }
 }
+
+class ClickTargetTest {
+    @Test fun secondsFollowMode() {
+        val t = com.frostbyte.gamebooster.data.ClickTarget(0, true, 100, 200, com.frostbyte.gamebooster.data.ClickTarget.MODE_NETWORK, 60, 5, 60)
+        assertEquals(5, t.seconds)
+        assertEquals(60, t.copy(mode = com.frostbyte.gamebooster.data.ClickTarget.MODE_REPEAT).seconds)
+        org.junit.Assert.assertTrue(t.placed)
+        org.junit.Assert.assertFalse(t.copy(x = -1).placed)
+    }
+}

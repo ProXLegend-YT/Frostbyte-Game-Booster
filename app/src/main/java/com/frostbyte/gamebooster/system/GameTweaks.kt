@@ -2,6 +2,7 @@ package com.frostbyte.gamebooster.system
 
 import android.app.ActivityManager
 import android.content.ContentResolver
+import android.content.pm.ApplicationInfo
 import android.content.Context
 import android.content.Intent
 import android.provider.Settings
@@ -39,7 +40,13 @@ object MemoryBoost {
             .map { it.activityInfo.packageName }.toSet()
         val ime = Settings.Secure.getString(c.contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD)
             ?.substringBefore('/')
+        val aggressive = Prefs.aggressiveSweep(c)
         return pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0)
+            .filter { ri ->
+                // Light mode: leave built-in system apps alone (killing them just makes them restart and costs CPU).
+                val f = ri.activityInfo.applicationInfo.flags
+                aggressive || (f and ApplicationInfo.FLAG_SYSTEM) == 0 || (f and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
+            }
             .map { it.activityInfo.packageName }
             .distinct()
             .filter { it != c.packageName && it !in exclude && it !in home && it != ime && it !in essential }

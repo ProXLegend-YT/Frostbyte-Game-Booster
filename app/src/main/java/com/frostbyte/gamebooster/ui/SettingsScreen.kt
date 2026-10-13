@@ -59,6 +59,7 @@ fun SettingsScreen() {
     var amoled by remember { mutableStateOf(Prefs.amoled(context)) }
     var sweep by remember { mutableStateOf(Prefs.sweepEnabled(context)) }
     var autoSweep by remember { mutableStateOf(Prefs.autoSweep(context)) }
+    var aggressive by remember { mutableStateOf(Prefs.aggressiveSweep(context)) }
     var syncPause by remember { mutableStateOf(Prefs.pauseSync(context)) }
     var dim by remember { mutableStateOf(Prefs.lowerBrightness(context)) }
     var dimPct by remember { mutableFloatStateOf(Prefs.brightnessPct(context).toFloat()) }
@@ -156,10 +157,13 @@ fun SettingsScreen() {
         SectionTitle("Gaming extras")
         GlassCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp)) {
-                SwitchRow("End background processes on boost", "Asks Android to end other apps' background processes before and just after launch, and on every Boost tap. Shows measured memory.", sweep) {
+                SwitchRow("End background processes on boost", "Once before launch (and when you tap Boost), only for apps you installed. Turn off to compare with and without.", sweep) {
                     sweep = it; Prefs.setSweepEnabled(context, it)
                 }
-                SwitchRow("Auto-boost when memory is low", "While you play, if free memory drops under 12%, FrostByte ends background processes again (at most every 3 minutes).", autoSweep) {
+                SwitchRow("Aggressive cleaning", "Also ends built-in system apps' background processes, and sweeps again 10 seconds after launch. Can make some phones slower because apps restart. Off by default.", aggressive) {
+                    aggressive = it; Prefs.setAggressiveSweep(context, it)
+                }
+                SwitchRow("Auto-boost when memory is very low", "Under 8% free while playing, at most every 5 minutes. Killed apps restart, which can cost performance, so leave this off unless you need it.", autoSweep) {
                     autoSweep = it; Prefs.setAutoSweep(context, it)
                 }
                 SwitchRow("Pause background sync while gaming", "Turns off automatic account sync during the game and restores your setting afterwards.", syncPause) {

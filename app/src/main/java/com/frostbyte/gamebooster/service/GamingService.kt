@@ -117,6 +117,7 @@ class GamingService : Service() {
     private var currentFg: String? = null
     private var lastThrottle = 0
     private var lastAutoSweep = 0L
+    private var lastUsagePoll = 0L
     private var locked = false
     private var afk = false
     private var afkLocked = false
@@ -157,6 +158,7 @@ class GamingService : Service() {
         lastGameSeen = startMs
         lastThrottle = 0
         lastAutoSweep = 0L
+        lastUsagePoll = 0L
         lastEventTime = 0L
         currentFg = null
         locked = false
@@ -173,7 +175,7 @@ class GamingService : Service() {
         goForeground()
         applyBoost()
         startMonitor()
-        if (Prefs.sweepEnabled(this)) {
+        if (Prefs.sweepEnabled(this) && Prefs.aggressiveSweep(this)) {
             scope.launch {
                 delay(10_000)
                 if (running) MemoryBoost.sweep(this@GamingService, setOf(gamePkg))
@@ -400,7 +402,7 @@ class GamingService : Service() {
                 }
                 val mem = DeviceStats.memory(this@GamingService)
                 val nowMs = System.currentTimeMillis()
-                if (Prefs.autoSweep(this@GamingService) && mem.availBytes < mem.totalBytes * 12 / 100 && nowMs - lastAutoSweep > 180_000) {
+                if (Prefs.autoSweep(this@GamingService) && mem.availBytes < mem.totalBytes * 8 / 100 && nowMs - lastAutoSweep > 300_000) {
                     lastAutoSweep = nowMs
                     val r = MemoryBoost.sweep(this@GamingService, setOf(gamePkg))
                     if (r.freedMb >= 20) toast("Memory was low. FrostByte ended background processes (+${r.freedMb} MB).")
@@ -425,7 +427,8 @@ class GamingService : Service() {
                     main.post { if (running) { postAlert("AFK ended", "The phone is critically hot. Gaming Mode stopped so it can cool down."); stopGaming() } }
                     return@launch
                 }
-                if (Perms.usage(this@GamingService)) {
+                if (nowMs - lastUsagePoll >= 15_000 && Perms.usage(this@GamingService)) {
+                    lastUsagePoll = nowMs
                     pollForeground()
                     val now = System.currentTimeMillis()
                     if (currentFg == gamePkg) {

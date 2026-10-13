@@ -57,7 +57,7 @@ fun BoostDialog(game: InstalledGame, onGuided: () -> Unit, onDismiss: () -> Unit
                 Text("Profile: ${profile.label}. ${profile.blurb}.", color = Frost.Muted, fontSize = 12.sp)
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "Before launch FrostByte asks Android to end other apps' background processes (then shows how much memory came back), " +
+                    "Before launch FrostByte asks Android to end background processes of the apps you installed, once (then shows how much memory came back), " +
                         "applies your profile and silences interruptions. It can't raise CPU speed, add RAM or cool the phone.",
                     color = Frost.Muted, fontSize = 11.sp,
                 )

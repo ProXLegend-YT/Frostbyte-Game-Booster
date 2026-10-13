@@ -37,6 +37,8 @@ import com.frostbyte.gamebooster.system.BrightnessController
 import com.frostbyte.gamebooster.system.DndController
 import com.frostbyte.gamebooster.system.SyncController
 import com.frostbyte.gamebooster.ui.AfkScreen
+import com.frostbyte.gamebooster.ui.AutoClickerScreen
+import com.frostbyte.gamebooster.ui.GhostTouchScreen
 import com.frostbyte.gamebooster.ui.AppManagerScreen
 import com.frostbyte.gamebooster.ui.CleanAndPlayScreen
 import com.frostbyte.gamebooster.ui.GamesScreen
@@ -108,8 +110,10 @@ fun FrostByteApp() {
                 sub == "afk" -> AfkScreen { sub = null }
                 sub == "manager" -> AppManagerScreen { sub = null }
                 sub == "coach" -> PerformanceCoachScreen { sub = null }
+                sub == "clicker" -> AutoClickerScreen { sub = null }
+                sub == "ghost" -> GhostTouchScreen { sub = null }
                 else -> when (selected) {
-                    0 -> HomeScreen(onOpenGames = { selected = 1 }, onOpenAfk = { sub = "afk" }, onOpenManager = { sub = "manager" }, onOpenCoach = { sub = "coach" }, onGuidedClean = { cleanGame = it })
+                    0 -> HomeScreen(onOpenGames = { selected = 1 }, onOpenAfk = { sub = "afk" }, onOpenManager = { sub = "manager" }, onOpenCoach = { sub = "coach" }, onOpenClicker = { sub = "clicker" }, onOpenGhost = { sub = "ghost" }, onGuidedClean = { cleanGame = it })
                     1 -> GamesScreen(onGuidedClean = { cleanGame = it })
                     2 -> PerformanceScreen(onOpenCoach = { sub = "coach" })
                     3 -> HistoryScreen()

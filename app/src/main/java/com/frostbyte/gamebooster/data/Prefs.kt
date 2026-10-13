@@ -97,8 +97,18 @@ object Prefs {
         sp(c).edit().putBoolean("sync_owned", owned).putBoolean("sync_saved", saved).apply()
     }
 
-    fun autoSweep(c: Context): Boolean = sp(c).getBoolean("auto_sweep", true)
+    fun autoSweep(c: Context): Boolean = sp(c).getBoolean("auto_sweep", false)
     fun setAutoSweep(c: Context, v: Boolean) { sp(c).edit().putBoolean("auto_sweep", v).apply() }
     fun devLimitSet(c: Context): Boolean = sp(c).getBoolean("dev_limit_set", false)
     fun setDevLimitSet(c: Context, v: Boolean) { sp(c).edit().putBoolean("dev_limit_set", v).apply() }
+
+    /** false = "Light": only user-installed apps, once before launch. true = old behaviour (all launcher apps, repeated). */
+    fun aggressiveSweep(c: Context): Boolean = sp(c).getBoolean("aggressive_sweep", false)
+    fun setAggressiveSweep(c: Context, v: Boolean) { sp(c).edit().putBoolean("aggressive_sweep", v).apply() }
+
+    // generic helpers (auto clicker settings)
+    fun getInt(c: Context, key: String, def: Int): Int = sp(c).getInt(key, def)
+    fun putInt(c: Context, key: String, v: Int) { sp(c).edit().putInt(key, v).apply() }
+    fun getBool(c: Context, key: String, def: Boolean): Boolean = sp(c).getBoolean(key, def)
+    fun putBool(c: Context, key: String, v: Boolean) { sp(c).edit().putBoolean(key, v).apply() }
 }

@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.AppOpsManager
 import android.app.NotificationManager
 import android.content.ActivityNotFoundException
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -13,6 +14,7 @@ import android.os.Process
 import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import com.frostbyte.gamebooster.service.ClickerService
 
 /** Permission checks + the official Android screens where the user grants them. Nothing is changed silently. */
 object Perms {
@@ -33,6 +35,15 @@ object Perms {
         } else {
             NotificationManagerCompat.from(c).areNotificationsEnabled()
         }
+
+    /** Is the FrostByte Auto Clicker accessibility service switched on in Android settings? */
+    fun accessibility(c: Context): Boolean {
+        val enabled = Settings.Secure.getString(c.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: return false
+        val cn = ComponentName(c, ClickerService::class.java)
+        return enabled.split(':').any { it.equals(cn.flattenToString(), true) || it.equals(cn.flattenToShortString(), true) }
+    }
+
+    fun openAccessibility(c: Context) = open(c, Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
 
     fun writeSettings(c: Context): Boolean = Settings.System.canWrite(c)
 
