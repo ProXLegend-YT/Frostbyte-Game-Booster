@@ -56,16 +56,6 @@ class PresetsTest {
     }
 }
 
-class MemoryBoostTest {
-    @Test fun summaryIsHonest() {
-        val gained = com.frostbyte.gamebooster.system.MemoryBoost.Result(12, 1000, 1400)
-        org.junit.Assert.assertEquals(400L, gained.freedMb)
-        org.junit.Assert.assertTrue(gained.summary().contains("1000"))
-        val none = com.frostbyte.gamebooster.system.MemoryBoost.Result(12, 1000, 1005)
-        org.junit.Assert.assertTrue(none.summary().contains("barely changed"))
-    }
-}
-
 class ClickTargetTest {
     @Test fun secondsFollowMode() {
         val t = com.frostbyte.gamebooster.data.ClickTarget(0, true, 100, 200, com.frostbyte.gamebooster.data.ClickTarget.MODE_NETWORK, 60, 5, 60)

@@ -12,8 +12,8 @@ android {
         applicationId = "com.frostbyte.gamebooster"
         minSdk = 29          // Android 10 (Galaxy A7 2018 max)
         targetSdk = 34
-        versionCode = 7
-        versionName = "1.3.0-clicker"
+        versionCode = 8
+        versionName = "1.3.1-lite"
     }
 
     buildTypes {

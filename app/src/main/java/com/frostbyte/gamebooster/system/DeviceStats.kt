@@ -5,9 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
-import android.os.Build
-import android.os.Environment
-import android.os.StatFs
 import android.os.PowerManager
 
 enum class ThermalLevel(val label: String) {
@@ -61,31 +58,4 @@ object DeviceStats {
 
     fun powerSave(context: Context): Boolean =
         (context.getSystemService(Context.POWER_SERVICE) as PowerManager).isPowerSaveMode
-
-    /** Android's own thermal throttling level: 0 none, 1 light, 2 moderate, 3 severe, 4 critical, 5 emergency, 6 shutdown. */
-    fun thermalStatus(context: Context): Int =
-        (context.getSystemService(Context.POWER_SERVICE) as PowerManager).currentThermalStatus
-
-    fun throttleLabel(status: Int): String = when (status) {
-        0 -> "None"
-        1 -> "Light"
-        2 -> "Moderate"
-        3 -> "Severe"
-        4 -> "Critical"
-        5 -> "Emergency"
-        else -> "Shutdown"
-    }
-
-    /** 1.0 = Android starts throttling. Only on Android 11+ and only if the device reports it; otherwise null. */
-    fun thermalHeadroom(context: Context): Float? {
-        if (Build.VERSION.SDK_INT < 30) return null
-        val h = (context.getSystemService(Context.POWER_SERVICE) as PowerManager).getThermalHeadroom(10)
-        return if (h.isNaN()) null else h
-    }
-
-    fun freeStoragePercent(): Int {
-        val st = StatFs(Environment.getDataDirectory().path)
-        val total = st.totalBytes
-        return if (total <= 0L) 100 else (st.availableBytes * 100 / total).toInt()
-    }
 }

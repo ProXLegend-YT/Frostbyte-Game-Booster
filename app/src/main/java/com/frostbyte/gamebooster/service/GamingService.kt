@@ -34,12 +34,9 @@ import com.frostbyte.gamebooster.data.Session
 import com.frostbyte.gamebooster.data.SessionStore
 import com.frostbyte.gamebooster.overlay.PanelOverlay
 import com.frostbyte.gamebooster.overlay.TouchLockOverlay
-import com.frostbyte.gamebooster.system.BrightnessController
 import com.frostbyte.gamebooster.system.DeviceStats
 import com.frostbyte.gamebooster.system.DndController
-import com.frostbyte.gamebooster.system.MemoryBoost
 import com.frostbyte.gamebooster.system.Perms
-import com.frostbyte.gamebooster.system.SyncController
 import com.frostbyte.gamebooster.system.ThermalLevel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -49,7 +46,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 /**
  * Gaming Mode. Runs only while you play: shows the "Game Booster" notification, owns the right-side panel,
@@ -115,8 +111,6 @@ class GamingService : Service() {
     private var lastGameSeen = 0L
     private var lastEventTime = 0L
     private var currentFg: String? = null
-    private var lastThrottle = 0
-    private var lastAutoSweep = 0L
     private var lastUsagePoll = 0L
     private var locked = false
     private var afk = false
@@ -156,8 +150,6 @@ class GamingService : Service() {
         activeGameName = gameName
         startMs = System.currentTimeMillis()
         lastGameSeen = startMs
-        lastThrottle = 0
-        lastAutoSweep = 0L
         lastUsagePoll = 0L
         lastEventTime = 0L
         currentFg = null
@@ -175,12 +167,6 @@ class GamingService : Service() {
         goForeground()
         applyBoost()
         startMonitor()
-        if (Prefs.sweepEnabled(this) && Prefs.aggressiveSweep(this)) {
-            scope.launch {
-                delay(10_000)
-                if (running) MemoryBoost.sweep(this@GamingService, setOf(gamePkg))
-            }
-        }
         if (afk) setAfk(true, false)
     }
 
@@ -215,11 +201,6 @@ class GamingService : Service() {
         locked = false
         setKeepAwake(false)
         DndController.restore(this)
-        BrightnessController.restore(this)
-        SyncController.restore(this)
-        if (Prefs.devLimitSet(this)) {
-            postAlert("Reset Background process limit", "Developer options > Apps > Background process limit > Standard limit, so your apps behave normally again.")
-        }
 
         val end = System.currentTimeMillis()
         if (end - startMs >= 20_000) {
@@ -249,27 +230,12 @@ class GamingService : Service() {
         if (eff.blockNotifications || eff.blockCalls) parts += if (dndOk) "Do Not Disturb on" else "Do Not Disturb needs permission"
         if (afk) parts += "AFK mode"
         if (eff.keepAwake || afk) parts += if (awakeView != null) "screen stays awake" else "screen-awake needs overlay permission"
-        if (Prefs.lowerBrightness(this)) {
-            parts += if (BrightnessController.apply(this, Prefs.brightnessPct(this))) "brightness ${Prefs.brightnessPct(this)}%" else "brightness needs 'Modify system settings'"
-        } else {
-            BrightnessController.restore(this)
-        }
-        if (Prefs.pauseSync(this)) {
-            parts += if (SyncController.pause(this)) "background sync paused" else "sync pause failed"
-        } else {
-            SyncController.restore(this)
-        }
         return parts.joinToString(" \u00B7 ")
     }
 
-    /** Panel/notification "Boost": end background processes again + re-apply your gaming settings. */
+    /** Panel/notification "Boost": re-apply your gaming settings and tell you what's active. */
     private fun boostNow() {
-        scope.launch {
-            val r = if (Prefs.sweepEnabled(this@GamingService)) MemoryBoost.sweep(this@GamingService, setOf(gamePkg)) else null
-            withContext(Dispatchers.Main) {
-                if (running) toast(applyBoost() + (r?.let { "\n" + it.summary() } ?: ""))
-            }
-        }
+        toast(applyBoost())
     }
 
     private fun setKeepAwake(on: Boolean) {
@@ -319,7 +285,6 @@ class GamingService : Service() {
             panel?.hide()
             Perms.open(this@GamingService, Intent(this@GamingService, MainActivity::class.java))
         }
-        override fun boost() = this@GamingService.boostNow()
         override fun afk(): Boolean = afk
         override fun toggleAfk() = setAfk(!afk, true)
         override fun capture(mode: String) {
@@ -390,23 +355,6 @@ class GamingService : Service() {
                 val b = DeviceStats.battery(this@GamingService)
                 b.tempC?.let { t -> tempMax = maxOf(tempMax ?: t, t) }
                 val th = b.thermal
-                val thr = DeviceStats.thermalStatus(this@GamingService)
-                if (thr != lastThrottle) {
-                    val rose = thr > lastThrottle
-                    lastThrottle = thr
-                    if (rose && thr >= 2) {
-                        main.post {
-                            if (running) postAlert("Android is throttling performance", "Throttle level: ${DeviceStats.throttleLabel(thr)}. Lower graphics or take a break so the phone can cool.")
-                        }
-                    }
-                }
-                val mem = DeviceStats.memory(this@GamingService)
-                val nowMs = System.currentTimeMillis()
-                if (Prefs.autoSweep(this@GamingService) && mem.availBytes < mem.totalBytes * 8 / 100 && nowMs - lastAutoSweep > 300_000) {
-                    lastAutoSweep = nowMs
-                    val r = MemoryBoost.sweep(this@GamingService, setOf(gamePkg))
-                    if (r.freedMb >= 20) toast("Memory was low. FrostByte ended background processes (+${r.freedMb} MB).")
-                }
                 if (th != lastThermal) {
                     lastThermal = th
                     main.post {
@@ -427,6 +375,7 @@ class GamingService : Service() {
                     main.post { if (running) { postAlert("AFK ended", "The phone is critically hot. Gaming Mode stopped so it can cool down."); stopGaming() } }
                     return@launch
                 }
+                val nowMs = System.currentTimeMillis()
                 if (nowMs - lastUsagePoll >= 15_000 && Perms.usage(this@GamingService)) {
                     lastUsagePoll = nowMs
                     pollForeground()

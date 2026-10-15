@@ -91,9 +91,5 @@ fun PermissionList() {
             "Usage access", "Detects when the game closes (to end Gaming Mode) and shows 'last played'.",
             Perms.usage(context), false,
         ) { Perms.openUsage(context) }
-        PermissionRow(
-            "Modify system settings", "Only for 'Lower brightness while gaming'. FrostByte restores your brightness afterwards.",
-            Perms.writeSettings(context), false,
-        ) { Perms.openWriteSettings(context) }
     }
 }

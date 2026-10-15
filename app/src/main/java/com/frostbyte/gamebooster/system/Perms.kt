@@ -45,8 +45,6 @@ object Perms {
 
     fun openAccessibility(c: Context) = open(c, Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
 
-    fun writeSettings(c: Context): Boolean = Settings.System.canWrite(c)
-
     fun open(c: Context, intent: Intent) {
         try {
             c.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -57,9 +55,6 @@ object Perms {
 
     fun openOverlay(c: Context) =
         open(c, Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${c.packageName}")))
-
-    fun openWriteSettings(c: Context) =
-        open(c, Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:${c.packageName}")))
 
     fun openDnd(c: Context) = open(c, Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
     fun openUsage(c: Context) = open(c, Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))

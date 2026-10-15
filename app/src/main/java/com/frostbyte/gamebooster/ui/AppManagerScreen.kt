@@ -39,13 +39,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.frostbyte.gamebooster.data.Games
 import com.frostbyte.gamebooster.system.DeviceStats
-import com.frostbyte.gamebooster.system.MemoryBoost
 import com.frostbyte.gamebooster.system.Perms
 import com.frostbyte.gamebooster.system.RecentApps
 import com.frostbyte.gamebooster.ui.theme.Frost
 import com.frostbyte.gamebooster.util.Fmt
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
@@ -61,9 +59,6 @@ fun AppManagerScreen(onBack: () -> Unit) {
         }
     }
     var unchecked by remember { mutableStateOf(setOf<String>()) }
-    val scope = rememberCoroutineScope()
-    var sweeping by remember { mutableStateOf(false) }
-    var sweepNote by remember { mutableStateOf<String?>(null) }
 
     // guided clean-up: opens each app's own App info page (where Android's Force stop button lives)
     var queue by remember { mutableStateOf(listOf<String>()) }
@@ -101,23 +96,6 @@ fun AppManagerScreen(onBack: () -> Unit) {
                 color = Frost.Muted, fontSize = 12.sp, modifier = Modifier.padding(14.dp),
             )
         }
-        Spacer(Modifier.height(8.dp))
-
-        Button(
-            onClick = {
-                if (!sweeping) {
-                    sweeping = true
-                    scope.launch {
-                        sweepNote = MemoryBoost.sweep(context, emptySet()).summary()
-                        sweeping = false
-                    }
-                }
-            },
-            modifier = Modifier.fillMaxWidth().height(50.dp),
-            shape = RoundedCornerShape(25.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Frost.Cyan, contentColor = Frost.Bg),
-        ) { Text(if (sweeping) "Working\u2026" else "Free memory now (no prompts)", fontWeight = FontWeight.Bold) }
-        sweepNote?.let { Text(it, color = Frost.Good, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp)) }
         Spacer(Modifier.height(8.dp))
 
         if (!hasUsage) {

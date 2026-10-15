@@ -51,7 +51,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 @Composable
-fun GamesScreen(onGuidedClean: (InstalledGame) -> Unit) {
+fun GamesScreen() {
     val context = LocalContext.current
     val resume = rememberResumeTick()
     var version by remember { mutableIntStateOf(0) }
@@ -142,9 +142,7 @@ fun GamesScreen(onGuidedClean: (InstalledGame) -> Unit) {
     }
 
     boostFor?.let { pkg ->
-        games.firstOrNull { it.packageName == pkg }?.let { g ->
-            BoostDialog(g, onGuided = { boostFor = null; onGuidedClean(g) }) { boostFor = null }
-        }
+        games.firstOrNull { it.packageName == pkg }?.let { g -> BoostDialog(g) { boostFor = null } }
     }
 
     if (showAdd) {

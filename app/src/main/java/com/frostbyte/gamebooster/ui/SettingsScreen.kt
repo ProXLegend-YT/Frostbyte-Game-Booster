@@ -57,12 +57,6 @@ fun SettingsScreen() {
     var cards by remember { mutableStateOf(Prefs.panelCards(context)) }
     var shortcuts by remember { mutableStateOf(Prefs.shortcuts(context)) }
     var amoled by remember { mutableStateOf(Prefs.amoled(context)) }
-    var sweep by remember { mutableStateOf(Prefs.sweepEnabled(context)) }
-    var autoSweep by remember { mutableStateOf(Prefs.autoSweep(context)) }
-    var aggressive by remember { mutableStateOf(Prefs.aggressiveSweep(context)) }
-    var syncPause by remember { mutableStateOf(Prefs.pauseSync(context)) }
-    var dim by remember { mutableStateOf(Prefs.lowerBrightness(context)) }
-    var dimPct by remember { mutableFloatStateOf(Prefs.brightnessPct(context).toFloat()) }
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -133,7 +127,7 @@ fun SettingsScreen() {
         SectionTitle("Panel shortcuts")
         GlassCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp)) {
-                listOf("boost" to "Boost (free memory)", "lock" to "Touch Lock", "shot" to "Screenshot", "rec" to "Screen record", "afk" to "AFK mode",
+                listOf("lock" to "Touch Lock", "shot" to "Screenshot", "rec" to "Screen record", "afk" to "AFK mode",
                     "vol" to "Volume", "net" to "Network settings", "settings" to "Settings").forEach { (id, label) ->
                     SwitchRow(label, "", id in shortcuts) { on ->
                         shortcuts = if (on) shortcuts + id else shortcuts - id
@@ -150,36 +144,6 @@ fun SettingsScreen() {
                     amoled = on
                     Prefs.setAmoled(context, on)
                     (context as? android.app.Activity)?.recreate()
-                }
-            }
-        }
-
-        SectionTitle("Gaming extras")
-        GlassCard(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(14.dp)) {
-                SwitchRow("End background processes on boost", "Once before launch (and when you tap Boost), only for apps you installed. Turn off to compare with and without.", sweep) {
-                    sweep = it; Prefs.setSweepEnabled(context, it)
-                }
-                SwitchRow("Aggressive cleaning", "Also ends built-in system apps' background processes, and sweeps again 10 seconds after launch. Can make some phones slower because apps restart. Off by default.", aggressive) {
-                    aggressive = it; Prefs.setAggressiveSweep(context, it)
-                }
-                SwitchRow("Auto-boost when memory is very low", "Under 8% free while playing, at most every 5 minutes. Killed apps restart, which can cost performance, so leave this off unless you need it.", autoSweep) {
-                    autoSweep = it; Prefs.setAutoSweep(context, it)
-                }
-                SwitchRow("Pause background sync while gaming", "Turns off automatic account sync during the game and restores your setting afterwards.", syncPause) {
-                    syncPause = it; Prefs.setPauseSync(context, it)
-                }
-                SwitchRow("Lower brightness while gaming", "Less heat, longer play. Needs 'Modify system settings' (Permissions above). Your brightness is restored afterwards.", dim) {
-                    dim = it; Prefs.setLowerBrightness(context, it)
-                }
-                if (dim) {
-                    Text("Brightness while gaming: ${dimPct.toInt()}%", color = Frost.Text, fontSize = 13.sp)
-                    Slider(
-                        value = dimPct, onValueChange = { dimPct = it },
-                        onValueChangeFinished = { Prefs.setBrightnessPct(context, dimPct.toInt()) },
-                        valueRange = 15f..90f,
-                        colors = SliderDefaults.colors(thumbColor = Frost.Cyan, activeTrackColor = Frost.Cyan, inactiveTrackColor = Frost.CardEdge),
-                    )
                 }
             }
         }
@@ -205,7 +169,7 @@ fun SettingsScreen() {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("\u2022 FrostByte can't raise CPU speed, add RAM, boost FPS or physically cool your phone.", color = Frost.Muted, fontSize = 12.sp)
                 Text("\u2022 Android restricts third-party apps from force-stopping other apps without special privileges. The Background App Manager lists recently used apps and walks you through each app's own Force Stop screen.", color = Frost.Muted, fontSize = 12.sp)
-                Text("\u2022 Touch Lock covers the screen with an invisible layer; Android has no switch to disable the touchscreen. Hold the pill 1.2s, or tap UNLOCK in the notification.", color = Frost.Muted, fontSize = 12.sp)
+                Text("\u2022 Touch Lock covers the screen with an invisible layer; Android has no switch to disable the touchscreen. Hold the pill 5s, or tap UNLOCK in the notification.", color = Frost.Muted, fontSize = 12.sp)
                 Text("\u2022 Screenshots and recordings always show Android's own capture prompt first, and a notification stays visible while capturing. Recordings are video-only for now. Files go to Pictures/FrostByte and Movies/FrostByte.", color = Frost.Muted, fontSize = 12.sp)
                 Text("\u2022 Everything stays on this phone. No account, no cloud.", color = Frost.Muted, fontSize = 12.sp)
             }

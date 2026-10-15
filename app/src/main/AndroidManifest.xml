@@ -16,12 +16,6 @@
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
     <!-- Optional: Do Not Disturb during games. -->
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
-    <!-- Memory boost: asks Android to end other apps' BACKGROUND processes (not force-stop). Normal permission. -->
-    <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
-    <!-- Optional gaming extras: lower brightness / pause background sync while gaming (always restored). -->
-    <uses-permission android:name="android.permission.WRITE_SETTINGS" tools:ignore="ProtectedPermissions" />
-    <uses-permission android:name="android.permission.READ_SYNC_SETTINGS" />
-    <uses-permission android:name="android.permission.WRITE_SYNC_SETTINGS" />
     <!-- Network type + ping check (a tiny connection test to 1.1.1.1, only while panel/Performance is open). -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.INTERNET" />

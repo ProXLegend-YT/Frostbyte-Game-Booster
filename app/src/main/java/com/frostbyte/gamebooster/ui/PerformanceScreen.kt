@@ -2,7 +2,6 @@ package com.frostbyte.gamebooster.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,7 +14,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -44,15 +42,13 @@ private fun levelColor(t: ThermalLevel?): Color = when (t) {
 }
 
 @Composable
-fun PerformanceScreen(onOpenCoach: () -> Unit) {
+fun PerformanceScreen() {
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
     var battery by remember { mutableStateOf(DeviceStats.battery(context)) }
     var memory by remember { mutableStateOf(DeviceStats.memory(context)) }
     var saver by remember { mutableStateOf(DeviceStats.powerSave(context)) }
     var net by remember { mutableStateOf(NetworkProbe.label(context)) }
-    var thr by remember { mutableIntStateOf(DeviceStats.thermalStatus(context)) }
-    var headroom by remember { mutableStateOf(DeviceStats.thermalHeadroom(context)) }
     var pings by remember { mutableStateOf(listOf<Int?>()) }
 
     LaunchedEffect(owner) {
@@ -62,8 +58,6 @@ fun PerformanceScreen(onOpenCoach: () -> Unit) {
                 memory = DeviceStats.memory(context)
                 saver = DeviceStats.powerSave(context)
                 net = NetworkProbe.label(context)
-                thr = DeviceStats.thermalStatus(context)
-                headroom = DeviceStats.thermalHeadroom(context)
                 delay(3000)
             }
         }
@@ -85,7 +79,6 @@ fun PerformanceScreen(onOpenCoach: () -> Unit) {
     ) {
         Text("Performance", color = Frost.Text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Text("Live readings straight from Android. Nothing here is estimated or invented.", color = Frost.Muted, fontSize = 12.sp)
-        ToolCard("\uD83D\uDE80 Performance Coach", "Finds what is slowing your games, with one-tap fixes", onOpenCoach, Modifier.fillMaxWidth())
 
         val th = battery.thermal
         GlassCard(Modifier.fillMaxWidth()) {
@@ -94,11 +87,6 @@ fun PerformanceScreen(onOpenCoach: () -> Unit) {
                 Text(battery.tempC?.let { "%.1f\u00B0C".format(it) } ?: "Temperature information unavailable",
                     color = Frost.Text, fontSize = 26.sp, fontWeight = FontWeight.Bold)
                 Text(th?.label ?: "", color = levelColor(th), fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                Text(
-                    "Android throttle: ${DeviceStats.throttleLabel(thr)}" +
-                        (headroom?.let { "  \u00B7  thermal headroom ${(it * 100).toInt()}%" } ?: ""),
-                    color = if (thr >= 2) Frost.Hot else Frost.Muted, fontSize = 12.sp,
-                )
                 Text(
                     when (th) {
                         ThermalLevel.WARM -> "Consider reducing graphics."

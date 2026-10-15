@@ -43,7 +43,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import com.frostbyte.gamebooster.R
 import com.frostbyte.gamebooster.data.Games
-import com.frostbyte.gamebooster.data.InstalledGame
 import com.frostbyte.gamebooster.data.SessionStore
 import com.frostbyte.gamebooster.service.GamingService
 import com.frostbyte.gamebooster.system.DeviceStats
@@ -56,10 +55,8 @@ fun HomeScreen(
     onOpenGames: () -> Unit,
     onOpenAfk: () -> Unit,
     onOpenManager: () -> Unit,
-    onOpenCoach: () -> Unit,
     onOpenClicker: () -> Unit,
     onOpenGhost: () -> Unit,
-    onGuidedClean: (InstalledGame) -> Unit,
 ) {
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
@@ -184,7 +181,6 @@ fun HomeScreen(
             ToolCard("\uD83C\uDF19 AFK Mode", "Stay in game, longer", onOpenAfk, Modifier.weight(1f))
             ToolCard("\uD83E\uDDF9 App Manager", "Close apps before you play", onOpenManager, Modifier.weight(1f))
         }
-        ToolCard("\uD83D\uDE80 Performance Coach", "Finds what is slowing your games, with one-tap fixes", onOpenCoach, Modifier.fillMaxWidth())
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ToolCard("\uD83D\uDC46 Auto Clicker", "Reconnect for you, 2 clickers", onOpenClicker, Modifier.weight(1f))
             ToolCard("\uD83D\uDC7B Ghost-Touch Test", "Check for phantom touches", onOpenGhost, Modifier.weight(1f))
@@ -197,7 +193,5 @@ fun HomeScreen(
         }
     }
 
-    if (showBoost && game != null) {
-        BoostDialog(game, onGuided = { showBoost = false; onGuidedClean(game) }) { showBoost = false }
-    }
+    if (showBoost && game != null) BoostDialog(game) { showBoost = false }
 }

@@ -23,7 +23,7 @@ object Profiles {
 object GameTips {
     fun tip(gameId: String, p: GameProfile): String = when {
         gameId == "roblox" -> when (p) {
-            GameProfile.PERFORMANCE -> "Roblox Turbo: Settings > Graphics Mode > Manual, quality 1-3 (biggest FPS gain). Use 5 GHz Wi-Fi if you can. FrostByte ends background apps and silences interruptions for you."
+            GameProfile.PERFORMANCE -> "Roblox: Settings > Graphics Mode > Manual, quality 1-3. Close other apps for steadier frames."
             GameProfile.BALANCED -> "Roblox: Automatic graphics is a good balance for most servers."
             GameProfile.BATTERY -> "Roblox: set Graphics Quality to 1-2 and lower screen brightness to save battery."
             GameProfile.CUSTOM -> "Custom: you choose what FrostByte blocks while Roblox runs."

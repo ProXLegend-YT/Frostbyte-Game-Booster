@@ -54,6 +54,9 @@ class ClickerService : AccessibilityService() {
             private set
 
         fun controlsVisible(): Boolean = instance?.controls != null
+
+        /** Hold time to wake from the touch shield. Long on purpose so a ghost touch can't unlock it by accident. */
+        private const val SHIELD_HOLD_MS = 5000L
     }
 
     private val main = Handler(Looper.getMainLooper())
@@ -68,9 +71,9 @@ class ClickerService : AccessibilityService() {
     private var editing = true
 
     private var shield: FrameLayout? = null
-    private var shieldBlack = false
     private var shieldPill: TextView? = null
-    private var shieldGravityStep = 0
+    private var holdAnimator: android.animation.ValueAnimator? = null
+    private var idlePulse: android.animation.ObjectAnimator? = null
 
     private var netCb: ConnectivityManager.NetworkCallback? = null
     @Volatile
@@ -276,8 +279,7 @@ class ClickerService : AccessibilityService() {
         btnPlay = play
         box.addView(play, size)
         box.addView(btn("\u270E") { toggleEdit() }, LinearLayout.LayoutParams(dp(46), dp(46)))
-        box.addView(btn("\uD83C\uDF11") { toggleShield(true) }, LinearLayout.LayoutParams(dp(46), dp(46)))
-        box.addView(btn("\uD83D\uDEE1") { toggleShield(false) }, LinearLayout.LayoutParams(dp(46), dp(46)))
+        box.addView(btn("\uD83D\uDEE1") { toggleShield() }, LinearLayout.LayoutParams(dp(46), dp(46)))
         box.addView(btn("\u2715") { hideAll() }, LinearLayout.LayoutParams(dp(46), dp(46)))
 
         val (sw, sh) = screenSize()
@@ -389,71 +391,102 @@ class ClickerService : AccessibilityService() {
         }
     }
 
-    // ------------------------------------------------------------------ screen shield (black "screen off" / clear touch shield)
+    // ------------------------------------------------------------------ touch shield (blocks ghost touches)
 
-    private fun toggleShield(black: Boolean) {
-        val had = shield != null
-        val sameKind = had && shieldBlack == black
-        removeShield()
-        if (sameKind) return
-        addShield(black)
+    private fun toggleShield() {
+        if (shield != null) removeShield() else addShield()
     }
 
-    private fun addShield(black: Boolean) {
+    private fun addShield() {
         val root = FrameLayout(this)
-        root.setBackgroundColor(if (black) Color.BLACK else Color.argb(1, 0, 0, 0))
+        root.setBackgroundColor(Color.argb(1, 0, 0, 0))   // effectively invisible, but still blocks touches
         root.setOnTouchListener { _, _ -> true }   // swallow ghost touches
 
-        val unlock = Runnable { removeShield() }
+        val ring = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(Color.argb(170, 6, 12, 24))
+            setStroke(dp(2), accent)
+        }
         val p = TextView(this).apply {
-            text = "\uD83D\uDD12 hold to wake"
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
-            setTextColor(Color.argb(if (black) 70 else 150, 255, 255, 255))   // very dim: friendly to AMOLED
-            setPadding(dp(14), dp(8), dp(14), dp(8))
+            text = "\uD83D\uDD12  Hold 5s to unlock"
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            setTextColor(Color.WHITE)
+            setPadding(dp(16), dp(10), dp(16), dp(10))
+            background = ring
             setOnTouchListener { _, e ->
                 when (e.actionMasked) {
-                    MotionEvent.ACTION_DOWN -> main.postDelayed(unlock, 1200)
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> main.removeCallbacks(unlock)
+                    MotionEvent.ACTION_DOWN -> startHoldToUnlock(this)
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> cancelHoldToUnlock(this)
                 }
                 true
             }
         }
         root.addView(p, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-            Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = dp(12) })
+            Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply { topMargin = dp(16) })
         shieldPill = p
+        startIdlePulse(p)
 
         val lp = WindowManager.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-            overlayFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON), PixelFormat.TRANSLUCENT,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY, overlayFlags(), PixelFormat.TRANSLUCENT,
         )
-        if (black) lp.screenBrightness = 0.01f   // dim backlight; black pixels are off on AMOLED
         try {
             wm.addView(root, lp)
             shield = root
-            shieldBlack = black
-            main.postDelayed(movePill, 60_000)
-            toast(if (black) "Screen-off mode: clickers keep working. Hold the faint pill to wake." else "Touch shield on: ghost touches are blocked. Hold the pill to turn off.")
+            toast("Touch shield on: ghost touches are blocked. Hold the lock for 5s to turn it off.")
         } catch (_: Exception) {
             toast("Couldn't start the shield")
         }
     }
 
-    // keep the pill moving so nothing stays lit in one spot on an AMOLED screen
-    private val movePill = object : Runnable {
-        override fun run() {
-            val p = shieldPill ?: return
-            val gravities = intArrayOf(
-                Gravity.TOP or Gravity.CENTER_HORIZONTAL, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL,
-                Gravity.CENTER_VERTICAL or Gravity.START, Gravity.CENTER_VERTICAL or Gravity.END,
-            )
-            shieldGravityStep = (shieldGravityStep + 1) % gravities.size
-            (p.layoutParams as? FrameLayout.LayoutParams)?.let {
-                it.gravity = gravities[shieldGravityStep]
-                p.layoutParams = it
-            }
-            main.postDelayed(this, 60_000)
+    /** A small idle pulse so the pill reads as "alive" rather than a dead sticker. */
+    private fun startIdlePulse(v: View) {
+        idlePulse?.cancel()
+        val a = android.animation.ObjectAnimator.ofPropertyValuesHolder(
+            v,
+            android.animation.PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, 1.08f),
+            android.animation.PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, 1.08f),
+        )
+        a.duration = 1100
+        a.repeatMode = android.animation.ValueAnimator.REVERSE
+        a.repeatCount = android.animation.ValueAnimator.INFINITE
+        a.start()
+        idlePulse = a
+    }
+
+    /** Fills the ring over 5 real seconds; releasing early cancels it with no effect. */
+    private fun startHoldToUnlock(v: TextView) {
+        idlePulse?.cancel()
+        v.animate().scaleX(1f).scaleY(1f).setDuration(120).start()
+        val ring = v.background as? GradientDrawable ?: return
+        holdAnimator?.cancel()
+        val anim = android.animation.ValueAnimator.ofFloat(0f, 1f)
+        anim.duration = SHIELD_HOLD_MS
+        anim.addUpdateListener { a ->
+            val t = a.animatedValue as Float
+            ring.setStroke(dp(2) + (t * dp(4)).toInt(), accent)
+            ring.setColor(Color.argb((170 + t * 70).toInt().coerceAtMost(255), 6, 12, 24))
+            v.scaleX = 1f + t * 0.1f
+            v.scaleY = 1f + t * 0.1f
         }
+        anim.addListener(object : android.animation.AnimatorListenerAdapter() {
+            override fun onAnimationEnd(animation: android.animation.Animator) {
+                if (holdAnimator === animation) removeShield()
+            }
+        })
+        anim.start()
+        holdAnimator = anim
+    }
+
+    private fun cancelHoldToUnlock(v: TextView) {
+        holdAnimator?.cancel()
+        holdAnimator = null
+        val ring = v.background as? GradientDrawable
+        ring?.setStroke(dp(2), accent)
+        ring?.setColor(Color.argb(170, 6, 12, 24))
+        v.scaleX = 1f
+        v.scaleY = 1f
+        startIdlePulse(v)
     }
 
     private fun setShieldTouchable(passThrough: Boolean) {
@@ -465,7 +498,10 @@ class ClickerService : AccessibilityService() {
     }
 
     private fun removeShield() {
-        main.removeCallbacks(movePill)
+        holdAnimator?.cancel()
+        holdAnimator = null
+        idlePulse?.cancel()
+        idlePulse = null
         shield?.let { try { wm.removeView(it) } catch (_: Exception) { } }
         shield = null
         shieldPill = null

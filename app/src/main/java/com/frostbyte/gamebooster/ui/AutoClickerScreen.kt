@@ -98,8 +98,7 @@ fun AutoClickerScreen(onBack: () -> Unit) {
                 Text("Step 2: place and run", color = Frost.Text, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 Text(
                     "Tap Show controls, open your game, drag the numbered circles onto the buttons you want tapped, then press \u25B6. " +
-                        "\u270E edit positions \u00B7 \uD83C\uDF11 black screen-off mode (clickers keep working, hold the faint pill to wake) \u00B7 " +
-                        "\uD83D\uDEE1 clear touch shield that blocks ghost touches \u00B7 \u2715 close.",
+                        "\u270E edit positions \u00B7 \uD83D\uDEE1 touch shield (blocks ghost touches, hold the pill 5s to turn off) \u00B7 \u2715 close.",
                     color = Frost.Muted, fontSize = 12.sp,
                 )
                 if (a11y) {
