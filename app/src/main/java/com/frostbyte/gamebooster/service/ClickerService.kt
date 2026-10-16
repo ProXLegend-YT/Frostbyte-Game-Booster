@@ -2,15 +2,21 @@ package com.frostbyte.gamebooster.service
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Color
 import android.graphics.Path
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
 import android.net.ConnectivityManager
 import android.net.Network
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
+import android.os.SystemClock
 import android.util.DisplayMetrics
 import android.util.TypedValue
 import android.view.Gravity
@@ -25,6 +31,7 @@ import android.widget.TextView
 import android.widget.Toast
 import com.frostbyte.gamebooster.data.ClickTarget
 import com.frostbyte.gamebooster.data.ClickerStore
+import com.frostbyte.gamebooster.data.Prefs
 import com.frostbyte.gamebooster.util.dp
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -41,6 +48,8 @@ import kotlinx.coroutines.withTimeoutOrNull
  * Auto Clicker. An accessibility service used ONLY to perform taps at points you place. It declares no permission
  * to read screen content. Two clickers: repeat every N seconds, or tap N seconds after your internet comes back
  * (for Roblox's Reconnect button). A black "screen-off" shield keeps the game running while the display is dark.
+ * While the shield is on, a wake guard instantly re-locks the screen if a ghost touch wakes the phone, and a
+ * watchdog + saved session restore the shield and the taps if Android restarts the service overnight.
  */
 class ClickerService : AccessibilityService() {
 
@@ -57,6 +66,15 @@ class ClickerService : AccessibilityService() {
 
         /** Hold time to wake from the touch shield. Long on purpose so a ghost touch can't unlock it by accident. */
         private const val SHIELD_HOLD_MS = 5000L
+
+        /** How long a shield session stays restorable after the service dies — covers an overnight AFK. */
+        private const val ARMED_TTL_MS = 14L * 3600_000L
+
+        /** Watchdog interval: how often a live session re-arms anything the system tore down. */
+        private const val WATCHDOG_PERIOD_MS = 20_000L
+
+        /** Minimum time between wake-guard re-locks, so a ghost touch storm can't hammer the system. */
+        private const val GUARD_DEBOUNCE_MS = 300L
     }
 
     private val main = Handler(Looper.getMainLooper())
@@ -79,6 +97,12 @@ class ClickerService : AccessibilityService() {
     @Volatile
     private var lostNet = false
 
+    private var wakeGuard: BroadcastReceiver? = null
+    private var watchdog: Job? = null
+    @Volatile
+    private var lastGuardLock = 0L
+    private var shieldRetries = 0
+
     private val accent = Color.parseColor("#38D0FF")
 
     // ------------------------------------------------------------------ service lifecycle
@@ -87,6 +111,20 @@ class ClickerService : AccessibilityService() {
         super.onServiceConnected()
         wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         instance = this
+        restoreSession()
+    }
+
+    /** If a shield session was armed and Android killed + rebound us while the screen is still off, bring the
+     *  shield and the taps back instead of leaving the phone exposed to ghost touches all night. At boot the
+     *  service only binds after the user unlocks, so a screen that's already on means a person is present: stay quiet. */
+    private fun restoreSession() {
+        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        val armedAt = Prefs.clickerArmedAt(this)
+        val fresh = armedAt > 0 && System.currentTimeMillis() - armedAt < ARMED_TTL_MS
+        if (!fresh || !Prefs.clickerArmed(this) || pm.isInteractive) return
+        addShield()
+        if (Prefs.clickerRunning(this)) startClicking(quiet = true)
+        toast("FrostByte restored your AFK session")
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) { /* we never read the screen */ }
@@ -106,6 +144,8 @@ class ClickerService : AccessibilityService() {
     private fun cleanup() {
         if (!::wm.isInitialized) return
         hideAll()
+        Prefs.setClickerArmed(this, false)   // deliberate teardown: don't auto-resume next time the service binds
+        Prefs.setClickerRunning(this, false)
         scope.cancel()
         instance = null
     }
@@ -148,7 +188,7 @@ class ClickerService : AccessibilityService() {
 
     // ------------------------------------------------------------------ running
 
-    private fun startClicking() {
+    private fun startClicking(quiet: Boolean = false) {
         if (running) return
         val active = ClickerStore.all(this).filter { it.enabled && it.placed }
         if (active.isEmpty()) {
@@ -156,6 +196,7 @@ class ClickerService : AccessibilityService() {
             return
         }
         running = true
+        Prefs.setClickerRunning(this, true)
         editing = false
         applyMarkerMode()
         registerNetwork()
@@ -168,12 +209,13 @@ class ClickerService : AccessibilityService() {
             }
         }
         updatePlayButton()
-        toast("Auto clicker ON")
+        if (!quiet) toast("Auto clicker ON")
     }
 
     private fun stopClicking() {
         if (!running && jobs.isEmpty()) return
         running = false
+        Prefs.setClickerRunning(this, false)
         jobs.forEach { it.cancel() }
         jobs.clear()
         unregisterNetwork()
@@ -191,6 +233,7 @@ class ClickerService : AccessibilityService() {
     }
 
     private fun registerNetwork() {
+        if (netCb != null) return   // already watching; the watchdog restart path calls this again
         val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         lostNet = false
         val cb = object : ConnectivityManager.NetworkCallback() {
@@ -433,7 +476,11 @@ class ClickerService : AccessibilityService() {
         try {
             wm.addView(root, lp)
             shield = root
-            toast("Touch shield on: ghost touches are blocked. Hold the lock for 5s to turn it off.")
+            shieldRetries = 0
+            Prefs.setClickerArmed(this, true)
+            armWakeGuard()
+            startWatchdog()
+            toast("Touch shield on: ghost touches are blocked and the screen re-locks itself if a ghost touch wakes it. Hold the lock 5s to turn it off.")
         } catch (_: Exception) {
             toast("Couldn't start the shield")
         }
@@ -502,9 +549,66 @@ class ClickerService : AccessibilityService() {
         holdAnimator = null
         idlePulse?.cancel()
         idlePulse = null
+        watchdog?.cancel()
+        watchdog = null
+        disarmWakeGuard()
+        Prefs.setClickerArmed(this, false)
         shield?.let { try { wm.removeView(it) } catch (_: Exception) { } }
         shield = null
         shieldPill = null
+    }
+
+    // ------------------------------------------------------------------ wake guard + watchdog (keep an armed session alive)
+
+    /** While the shield is on, any wake of a screen that was supposed to be asleep gets locked again instantly,
+     *  using the accessibility lock action (no extra permission). A ghost touch can light the screen, but it can
+     *  no longer swipe past the lock screen into the game. It re-locks on unlock too, in case an insecure keyguard
+     *  gets walked through on an OEM that hides overlays from the lock screen. To use the phone for real, hold the
+     *  shield pill 5s — that disarms this guard before you unlock. */
+    private fun armWakeGuard() {
+        if (wakeGuard != null) return
+        val r = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                if (shield == null) return
+                val now = SystemClock.elapsedRealtime()
+                if (now - lastGuardLock < GUARD_DEBOUNCE_MS) return   // don't hammer the system during a touch storm
+                lastGuardLock = now
+                performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN)
+            }
+        }
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_USER_PRESENT)
+        }
+        try {
+            if (Build.VERSION.SDK_INT >= 33) registerReceiver(r, filter, Context.RECEIVER_NOT_EXPORTED)
+            else registerReceiver(r, filter)
+            wakeGuard = r
+        } catch (_: Exception) { }
+    }
+
+    private fun disarmWakeGuard() {
+        wakeGuard?.let { try { unregisterReceiver(it) } catch (_: Exception) { } }
+        wakeGuard = null
+    }
+
+    /** Every so often, quietly re-arm anything the system tore down: the shield overlay itself and the tap loops. */
+    private fun startWatchdog() {
+        watchdog?.cancel()
+        watchdog = scope.launch {
+            while (isActive) {
+                delay(WATCHDOG_PERIOD_MS)
+                if (shield?.isAttachedToWindow != true) {
+                    if (shieldRetries < 3) { shieldRetries++; removeShield(); addShield() }
+                } else {
+                    shieldRetries = 0
+                }
+                if (running && jobs.isEmpty()) {
+                    running = false
+                    startClicking(quiet = true)
+                }
+            }
+        }
     }
 
     private fun toast(msg: String) {

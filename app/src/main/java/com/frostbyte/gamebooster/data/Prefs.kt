@@ -75,6 +75,18 @@ object Prefs {
     fun afkStopHot(c: Context): Boolean = sp(c).getBoolean("afk_stop_hot", true)
     fun setAfkStopHot(c: Context, v: Boolean) { sp(c).edit().putBoolean("afk_stop_hot", v).apply() }
 
+    // ---- clicker touch shield: "armed" while a shield session is live, so an overnight AFK session can be
+    // restored if Android restarts the accessibility service, instead of leaving the phone exposed to ghost touches.
+    fun clickerArmed(c: Context): Boolean = sp(c).getBoolean("clicker_armed", false)
+    fun clickerArmedAt(c: Context): Long = sp(c).getLong("clicker_armed_at", 0L)
+    fun setClickerArmed(c: Context, on: Boolean) {
+        sp(c).edit().putBoolean("clicker_armed", on)
+            .putLong("clicker_armed_at", if (on) System.currentTimeMillis() else 0L).apply()
+    }
+
+    fun clickerRunning(c: Context): Boolean = sp(c).getBoolean("clicker_running", false)
+    fun setClickerRunning(c: Context, v: Boolean) { sp(c).edit().putBoolean("clicker_running", v).apply() }
+
     // ---- auto clicker (generic helpers used by Clicker.kt) ----
     fun getInt(c: Context, key: String, def: Int): Int = sp(c).getInt(key, def)
     fun putInt(c: Context, key: String, v: Int) { sp(c).edit().putInt(key, v).apply() }
