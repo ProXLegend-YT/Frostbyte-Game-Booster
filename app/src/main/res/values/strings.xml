@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">FrostByte Game Booster</string>
+    <string name="clicker_label">FrostByte Auto Clicker</string>
+    <string name="clicker_description">Taps only the screen points you choose, when you tell it to (for example the Reconnect button). It cannot read what is on your screen.</string>
+</resources>
