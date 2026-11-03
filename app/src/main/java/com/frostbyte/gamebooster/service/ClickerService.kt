@@ -43,6 +43,7 @@ import com.frostbyte.gamebooster.data.ClickTarget
 import com.frostbyte.gamebooster.data.ClickerStore
 import com.frostbyte.gamebooster.data.Prefs
 import com.frostbyte.gamebooster.system.Perms
+import com.frostbyte.gamebooster.system.RecentApps
 import com.frostbyte.gamebooster.util.dp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -134,8 +135,8 @@ class ClickerService : AccessibilityService() {
         wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         if (!scope.isActive) scope = newScope()   // the same object can be re-bound after a teardown
         instance = this
-        recordLastExit()
         restoreSession()
+        main.post { recordLastExit() }   // a slow system call: never let it delay the restore
     }
 
     /** Android kills the whole FrostByte process under memory pressure (Roblox is heavy), then re-binds this service.
@@ -143,12 +144,13 @@ class ClickerService : AccessibilityService() {
      *  the taps and (only if the screen is off) the shield. After a reboot or 14 h it stays quiet. */
     private fun restoreSession() {
         if (!Prefs.clickerSession(this)) return
-        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        sessionOn = true
+        // 1) Shield first: it is a single view and the most important thing to get back on screen quickly.
+        //    AFK keeps the screen lit, so a lit screen proves nothing; the shield was armed on purpose.
+        //    (A reboot is already ruled out by the session check; holding the pill 5 s still turns it off.)
+        if (Prefs.clickerArmed(this)) addShield(quiet = true)
+        // 2) Controls + markers, 3) taps.
         showControls()
-        if (Prefs.clickerArmed(this)) {
-            // a lit screen means a person is here: don't throw a touch-blocking shield over their game
-            if (!pm.isInteractive) addShield(quiet = true) else Prefs.setClickerArmed(this, false)
-        }
         if (Prefs.clickerRunning(this)) startClicking(quiet = true)
         toast("FrostByte restored your Auto Clicker")
     }
@@ -174,6 +176,26 @@ class ClickerService : AccessibilityService() {
             val extra = e.description?.takeIf { it.isNotBlank() }?.let { " [$it]" } ?: ""
             Prefs.setLastExit(this, e.timestamp, "$why$extra")
         } catch (_: Exception) { }
+    }
+
+    private var lastTrimClear = 0L
+
+    /** Android warns a foreground process before it starts killing. At the first warning, clear other apps' background
+     *  processes (never a force-stop, never the app on screen) so Android frees RAM from them instead of from us. */
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level < 10 || !sessionOn || !Prefs.boostFreeRam(this)) return   // 10 = RUNNING_LOW
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastTrimClear < 60_000L) return
+        lastTrimClear = now
+        scope.launch(Dispatchers.Default) {
+            try {
+                val am = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+                RecentApps.packages(this@ClickerService, emptySet()).forEach {
+                    try { am.killBackgroundProcesses(it) } catch (_: Exception) { }
+                }
+            } catch (_: Exception) { }
+        }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) { /* we never read the screen */ }
@@ -284,11 +306,11 @@ class ClickerService : AccessibilityService() {
     fun showControls() {
         sessionOn = true
         Prefs.setClickerSession(this, true)
-        startKeepAlive()
         if (controls == null) buildControls()
         editing = true
         refreshMarkers()
         startWatchdog()
+        startKeepAlive()   // after the views are up, so the notification never delays them
     }
 
     /** The user pressed \u2715 / Hide: stop everything AND forget the session so it doesn't come back by itself. */
