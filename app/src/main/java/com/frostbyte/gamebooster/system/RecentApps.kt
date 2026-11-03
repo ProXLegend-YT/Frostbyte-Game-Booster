@@ -45,4 +45,30 @@ object RecentApps {
             }
         }.sortedByDescending { it.lastUsed }
     }
+
+    /** Same filter as [load], but package names only (no icons or labels): cheap enough to call when memory is tight. */
+    fun packages(c: Context, exclude: Set<String>): List<String> {
+        if (!Perms.usage(c)) return emptyList()
+        val usm = c.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+        val now = System.currentTimeMillis()
+        @Suppress("DEPRECATION")
+        val stats = try {
+            usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, now - 24L * 3_600_000L, now)
+        } catch (_: SecurityException) {
+            null
+        } ?: return emptyList()
+        val pm = c.packageManager
+        val home = pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), 0)
+            .map { it.activityInfo.packageName }.toSet()
+        return stats.filter { it.totalTimeInForeground > 0L }.map { it.packageName }.distinct().filter { pkg ->
+            if (pkg == c.packageName || pkg in exclude || pkg in home) return@filter false
+            try {
+                val ai = pm.getApplicationInfo(pkg, 0)
+                val system = (ai.flags and ApplicationInfo.FLAG_SYSTEM) != 0 && (ai.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) == 0
+                !system && pm.getLaunchIntentForPackage(pkg) != null
+            } catch (_: PackageManager.NameNotFoundException) {
+                false
+            }
+        }
+    }
 }
