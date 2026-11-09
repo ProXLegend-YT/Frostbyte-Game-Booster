@@ -128,6 +128,9 @@ object Prefs {
     fun setMacroGapSec(c: Context, v: Int) { sp(c).edit().putInt("macro_gap", v).apply() }
     fun macroSpeed(c: Context): Float = sp(c).getFloat("macro_speed", 1f)
     fun setMacroSpeed(c: Context, v: Float) { sp(c).edit().putFloat("macro_speed", v).apply() }
+    /** Try live recording (needs root) before falling back to capture mode. */
+    fun macroLive(c: Context): Boolean = sp(c).getBoolean("macro_live", true)
+    fun setMacroLive(c: Context, v: Boolean) { sp(c).edit().putBoolean("macro_live", v).apply() }
     /** While recording, let each finished touch reach the game too (so menus advance as you record). */
     fun macroForward(c: Context): Boolean = sp(c).getBoolean("macro_forward", true)
     fun setMacroForward(c: Context, v: Boolean) { sp(c).edit().putBoolean("macro_forward", v).apply() }
@@ -146,4 +149,23 @@ object Prefs {
     }
     fun macroLooping(c: Context): Boolean = sp(c).getBoolean("macro_looping", false)
     fun setMacroLooping(c: Context, v: Boolean) { sp(c).edit().putBoolean("macro_looping", v).apply() }
+
+    // ---- fishing loop: Clicker 1 = HOLD key, Clicker 2 = FAST-TAP key, repeated again and again
+    fun fishMode(c: Context): Boolean = sp(c).getBoolean("fish_mode", false)
+    fun setFishMode(c: Context, v: Boolean) { sp(c).edit().putBoolean("fish_mode", v).apply() }
+    /** How long the hold key is held (the cast charge meter fills while you hold). */
+    fun fishHoldMs(c: Context): Int = sp(c).getInt("fish_hold_ms", 1200)
+    fun setFishHoldMs(c: Context, v: Int) { sp(c).edit().putInt("fish_hold_ms", v).apply() }
+    /** Wait after letting go of the hold key, until the "tap fast" prompt shows up. */
+    fun fishWaitMs(c: Context): Int = sp(c).getInt("fish_wait_ms", 3000)
+    fun setFishWaitMs(c: Context, v: Int) { sp(c).edit().putInt("fish_wait_ms", v).apply() }
+    /** Fast taps per second. */
+    fun fishRate(c: Context): Int = sp(c).getInt("fish_rate", 8)
+    fun setFishRate(c: Context, v: Int) { sp(c).edit().putInt("fish_rate", v).apply() }
+    /** How long the fast tapping lasts. */
+    fun fishBurstMs(c: Context): Int = sp(c).getInt("fish_burst_ms", 6000)
+    fun setFishBurstMs(c: Context, v: Int) { sp(c).edit().putInt("fish_burst_ms", v).apply() }
+    /** Pause after the taps, before the next cast. */
+    fun fishPauseMs(c: Context): Int = sp(c).getInt("fish_pause_ms", 2000)
+    fun setFishPauseMs(c: Context, v: Int) { sp(c).edit().putInt("fish_pause_ms", v).apply() }
 }
