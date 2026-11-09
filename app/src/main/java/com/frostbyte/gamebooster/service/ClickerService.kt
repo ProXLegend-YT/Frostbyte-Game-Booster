@@ -384,6 +384,7 @@ class ClickerService : AccessibilityService() {
     private fun startClicking(quiet: Boolean = false) {
         if (running) return
         if (macro.busy) macro.stopAll("Macro stopped")
+        if (Prefs.fishMode(this)) { startFishing(quiet); return }
         val active = ClickerStore.all(this).filter { it.enabled && it.placed }
         if (active.isEmpty()) {
             toast("Turn on a clicker in FrostByte and place its marker first")
@@ -412,6 +413,102 @@ class ClickerService : AccessibilityService() {
         }
         updatePlayButton()
         if (!quiet) toast("Auto clicker ON")
+    }
+
+    // ------------------------------------------------------------------ fishing loop (hold key + fast-tap key)
+
+    /** Clicker 1 is the HOLD key (cast), Clicker 2 is the FAST-TAP key (reel). The loop is: hold, wait, tap fast, pause, repeat. */
+    private fun startFishing(quiet: Boolean) {
+        val hold = ClickerStore.get(this, 0)
+        val tap = ClickerStore.get(this, 1)
+        if (!hold.placed || !tap.placed) {
+            toast("Fishing mode needs both markers placed: 1 = hold key, 2 = fast-tap key")
+            return
+        }
+        running = true
+        Prefs.setClickerRunning(this, true)
+        editing = false
+        holdWake()
+        applyMarkerMode()
+        jobs += scope.launch {
+            while (isActive) {
+                try {
+                    holdAt(hold, Prefs.fishHoldMs(this@ClickerService).toLong())
+                    delay(Prefs.fishWaitMs(this@ClickerService).toLong())
+                    burstAt(tap, Prefs.fishRate(this@ClickerService), Prefs.fishBurstMs(this@ClickerService).toLong())
+                    delay(Prefs.fishPauseMs(this@ClickerService).toLong().coerceAtLeast(300L))
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    delay(1000)   // one bad round must never end the loop
+                }
+            }
+        }
+        updatePlayButton()
+        if (!quiet) toast("Fishing loop ON: hold, wait, fast-tap, repeat")
+    }
+
+    /** Presses and holds one spot for [ms], then lets go. The shield (if on) stays open for the whole hold. */
+    private suspend fun holdAt(t: ClickTarget, ms: Long) {
+        val shielded = shield != null
+        val marker = markers[t.index]
+        marker?.alpha = 1f
+        try {
+            if (shielded) { setShieldTouchable(true); delay(60) }
+            val path = Path().apply { moveTo(t.x.toFloat(), t.y.toFloat()) }
+            val dur = ms.coerceIn(10L, GestureDescription.getMaxGestureDuration())
+            sendGesture(GestureDescription.Builder().addStroke(GestureDescription.StrokeDescription(path, 0, dur)).build(), dur + 1500L)
+            if (shielded) delay(40)
+        } finally {
+            if (shielded) setShieldTouchable(false)
+            marker?.alpha = if (editing) 0.9f else 0.5f
+        }
+    }
+
+    /** Taps one spot [rate] times a second for [totalMs]. Up to 20 taps go out in a single gesture, so the speed stays exact. */
+    private suspend fun burstAt(t: ClickTarget, rate: Int, totalMs: Long) {
+        val interval = 1000L / rate.coerceIn(1, 20)
+        val tapMs = minOf(40L, maxOf(10L, interval - 8L))
+        val count = maxOf(1L, totalMs / interval)
+        val perGesture = GestureDescription.getMaxStrokeCount().coerceAtMost(20)
+        val shielded = shield != null
+        val marker = markers[t.index]
+        marker?.alpha = 1f
+        try {
+            if (shielded) { setShieldTouchable(true); delay(60) }
+            var done = 0L
+            while (done < count) {
+                val batch = minOf(perGesture.toLong(), count - done).toInt()
+                val b = GestureDescription.Builder()
+                for (i in 0 until batch) {
+                    val path = Path().apply { moveTo(t.x.toFloat(), t.y.toFloat()) }
+                    b.addStroke(GestureDescription.StrokeDescription(path, i * interval, tapMs))
+                }
+                sendGesture(b.build(), batch * interval + 1500L)
+                done += batch
+            }
+            if (shielded) delay(40)
+        } finally {
+            if (shielded) setShieldTouchable(false)
+            marker?.alpha = if (editing) 0.9f else 0.5f
+        }
+    }
+
+    /** Sends a gesture and waits until it finishes (or a safety timeout). One quick retry if the system was busy. */
+    private suspend fun sendGesture(g: GestureDescription, timeoutMs: Long) {
+        for (attempt in 0..1) {
+            val done = CompletableDeferred<Unit>()
+            val ok = dispatchGesture(
+                g,
+                object : GestureResultCallback() {
+                    override fun onCompleted(gestureDescription: GestureDescription?) { done.complete(Unit) }
+                    override fun onCancelled(gestureDescription: GestureDescription?) { done.complete(Unit) }
+                },
+                null,
+            )
+            if (ok) { withTimeoutOrNull(timeoutMs) { done.await() }; return }
+            delay(120)
+        }
     }
 
     private fun stopClicking() = stopClickingInternal(persist = true)
@@ -860,7 +957,7 @@ class ClickerService : AccessibilityService() {
         }
 
         if (sessionOn) {
-            val needsLoop = ClickerStore.all(this).any { it.enabled && it.placed && it.mode == ClickTarget.MODE_REPEAT }
+            val needsLoop = Prefs.fishMode(this) || ClickerStore.all(this).any { it.enabled && it.placed && it.mode == ClickTarget.MODE_REPEAT }
             if (running && needsLoop && jobs.none { it.isActive }) {
                 stopClickingInternal(persist = false)
                 startClicking(quiet = true)

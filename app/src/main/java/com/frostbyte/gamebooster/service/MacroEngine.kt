@@ -30,11 +30,13 @@ import com.frostbyte.gamebooster.data.Prefs
 import com.frostbyte.gamebooster.util.dp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.hypot
 import kotlin.math.max
@@ -96,6 +98,13 @@ class MacroEngine(private val svc: ClickerService) {
     private var fwdQueue: Channel<MacroStroke>? = null
     private var fwdJob: Job? = null
 
+    // ---- live recording (root): your touches go straight to the game and are logged as they happen
+    private var live = false
+    private var starting = false
+    private var noRoot = false
+    private var liveReader: RootTouch.LiveReader? = null
+    private var liveJob: Job? = null
+
     // ---- playback
     private var playJob: Job? = null
     private var hole = false
@@ -148,6 +157,8 @@ class MacroEngine(private val svc: ClickerService) {
         recTicker?.cancel()
         fwdJob?.cancel()
         fwdQueue?.close()
+        liveReader?.stop()
+        liveJob?.cancel()
         playJob?.cancel()
         removeRecView()
         removeBar()
@@ -173,7 +184,7 @@ class MacroEngine(private val svc: ClickerService) {
             }
         }
         if (mode == Mode.PLAYING && playJob?.isActive != true) finishPlayback(null)
-        if (mode == Mode.RECORDING && recView?.isAttachedToWindow != true && SystemClock.elapsedRealtime() - recStartedAt > 2000) {
+        if (mode == Mode.RECORDING && !live && recView?.isAttachedToWindow != true && SystemClock.elapsedRealtime() - recStartedAt > 2000) {
             stopRecording(save = true)
         }
         refreshButtons()
@@ -340,7 +351,93 @@ class MacroEngine(private val svc: ClickerService) {
 
     // ------------------------------------------------------------------ recording
 
+    /** Forget a failed root check so the next recording tries live mode again (used by the "Check root" button). */
+    fun resetRootCheck() { noRoot = false }
+
     private fun startRecording() {
+        if (bar == null || starting) return
+        if (!canTouch()) { svc.toast("Turn the screen on first"); return }
+        if (Prefs.macroLive(svc) && !noRoot) {
+            starting = true
+            svc.toast("Looking for root: allow it if asked")
+            svc.scope.launch {
+                val prep = withContext(Dispatchers.IO) { RootTouch.prepare() }
+                starting = false
+                if (mode != Mode.IDLE || bar == null) return@launch
+                val panel = prep.panel
+                if (panel != null) {
+                    beginLive(panel)
+                } else {
+                    noRoot = true
+                    svc.toast("Live recording needs Shizuku or root (${prep.error}). Using capture mode: your touches are recorded, but they won't reach the game while recording.")
+                    startCaptureRecording()
+                }
+            }
+        } else {
+            startCaptureRecording()
+        }
+    }
+
+    /** Live mode: nothing sits over the screen. You play normally and getevent logs every touch. */
+    private fun beginLive(panel: RootTouch.Panel) {
+        svc.stopClickerForMacro()
+        if (svc.hasShield()) {
+            svc.removeShieldForMacro()
+            svc.toast("Touch shield turned off while recording")
+        }
+        strokes.clear()
+        val (w, h) = svc.screenSize()
+        @Suppress("DEPRECATION")
+        val rot = svc.wm.defaultDisplay.rotation
+        val rd = RootTouch.LiveReader(
+            panel, w, h, rot,
+            onStroke = { s -> svc.main.post { onLiveStroke(s) } },
+            onError = { msg -> svc.main.post { liveFailed(msg) } },
+        )
+        liveReader = rd
+        live = true
+        mode = Mode.RECORDING
+        recStartedAt = SystemClock.elapsedRealtime()
+        liveJob = rd.start(svc.scope)
+        setKeepScreen(true)
+        watchScreenOff(true)
+        recTicker?.cancel()
+        recTicker = svc.scope.launch {
+            while (isActive) {
+                setStatus("\u25CF LIVE ${fmt(SystemClock.elapsedRealtime() - recStartedAt)}\n${strokes.size} touches")
+                delay(400)
+            }
+        }
+        refreshButtons()
+        svc.toast("Live recording is ON. Use your phone normally: every tap, hold and swipe is recorded. Tap \u25A0 on the bar when you're done.")
+    }
+
+    private fun onLiveStroke(s: MacroStroke) {
+        if (mode != Mode.RECORDING || !live) return
+        // Touches on the bar itself (like the final tap on stop) are not part of the macro.
+        val b = bar
+        val lp = barLp
+        val first = s.pts.firstOrNull() ?: return
+        if (b != null && lp != null) {
+            val m = dp(10)
+            if (first.x >= lp.x - m && first.x <= lp.x + b.width + m && first.y >= lp.y - m && first.y <= lp.y + b.height + m) return
+        }
+        if (strokes.size >= MacroStore.MAX_STROKES) {
+            svc.toast("Recording is full (${MacroStore.MAX_STROKES} touches): stopping")
+            stopRecording(save = true)
+            return
+        }
+        strokes += s
+    }
+
+    private fun liveFailed(msg: String) {
+        if (mode != Mode.RECORDING || !live) return
+        stopRecording(save = strokes.isNotEmpty())
+        svc.toast("Live recording stopped: $msg")
+    }
+
+    /** Capture mode (no root): a see-through layer catches your touches. They can't reach the game while it is on. */
+    private fun startCaptureRecording() {
         if (bar == null) return
         if (!canTouch()) { svc.toast("Turn the screen on first"); return }
         svc.stopClickerForMacro()
@@ -389,6 +486,11 @@ class MacroEngine(private val svc: ClickerService) {
     private fun stopRecording(save: Boolean) {
         if (mode != Mode.RECORDING) return
         mode = Mode.IDLE
+        liveReader?.stop()
+        liveReader = null
+        liveJob?.cancel()
+        liveJob = null
+        live = false
         recTicker?.cancel()
         fwdJob?.cancel()
         fwdQueue?.close()
@@ -397,7 +499,8 @@ class MacroEngine(private val svc: ClickerService) {
         removeRecView()
         watchScreenOff(false)
         setKeepScreen(false)
-        val list = ArrayList(strokes)
+        val base = strokes.minOfOrNull { it.startMs } ?: 0L
+        val list = strokes.map { it.copy(startMs = it.startMs - base) }
         if (save) {
             if (list.isEmpty()) {
                 svc.toast("Nothing was recorded")
