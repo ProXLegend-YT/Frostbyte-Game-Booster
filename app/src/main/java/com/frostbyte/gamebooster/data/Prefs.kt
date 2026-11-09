@@ -122,4 +122,28 @@ object Prefs {
     // ---- boost: free RAM by clearing other apps' background processes when Gaming Mode starts
     fun boostFreeRam(c: Context): Boolean = sp(c).getBoolean("boost_free_ram", true)
     fun setBoostFreeRam(c: Context, v: Boolean) { sp(c).edit().putBoolean("boost_free_ram", v).apply() }
+
+    // ---- macro recorder ("Tiny Task for phones")
+    fun macroGapSec(c: Context): Int = sp(c).getInt("macro_gap", 4)
+    fun setMacroGapSec(c: Context, v: Int) { sp(c).edit().putInt("macro_gap", v).apply() }
+    fun macroSpeed(c: Context): Float = sp(c).getFloat("macro_speed", 1f)
+    fun setMacroSpeed(c: Context, v: Float) { sp(c).edit().putFloat("macro_speed", v).apply() }
+    /** While recording, let each finished touch reach the game too (so menus advance as you record). */
+    fun macroForward(c: Context): Boolean = sp(c).getBoolean("macro_forward", true)
+    fun setMacroForward(c: Context, v: Boolean) { sp(c).edit().putBoolean("macro_forward", v).apply() }
+
+    /** "The macro bar is on screen" and "the loop is running" survive the process being killed, like the clicker session. */
+    fun setMacroSession(c: Context, on: Boolean) {
+        sp(c).edit().putBoolean("macro_session", on)
+            .putLong("macro_session_at", if (on) System.currentTimeMillis() else 0L)
+            .putInt("macro_session_boot", if (on) bootCount(c) else -1).apply()
+    }
+    fun macroSession(c: Context): Boolean {
+        val s = sp(c)
+        if (!s.getBoolean("macro_session", false)) return false
+        val fresh = System.currentTimeMillis() - s.getLong("macro_session_at", 0L) < SESSION_TTL_MS
+        return fresh && s.getInt("macro_session_boot", -1) == bootCount(c)
+    }
+    fun macroLooping(c: Context): Boolean = sp(c).getBoolean("macro_looping", false)
+    fun setMacroLooping(c: Context, v: Boolean) { sp(c).edit().putBoolean("macro_looping", v).apply() }
 }
