@@ -57,6 +57,7 @@ fun HomeScreen(
     onOpenManager: () -> Unit,
     onOpenClicker: () -> Unit,
     onOpenGhost: () -> Unit,
+    onOpenMacro: () -> Unit,
 ) {
     val context = LocalContext.current
     val owner = LocalLifecycleOwner.current
@@ -184,6 +185,10 @@ fun HomeScreen(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ToolCard("\uD83D\uDC46 Auto Clicker", "Reconnect for you, 2 clickers", onOpenClicker, Modifier.weight(1f))
             ToolCard("\uD83D\uDC7B Ghost-Touch Test", "Check for phantom touches", onOpenGhost, Modifier.weight(1f))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ToolCard("\uD83D\uDD34 Macro Recorder", "Record touches, replay, loop", onOpenMacro, Modifier.weight(1f))
+            Spacer(Modifier.weight(1f))
         }
 
         SectionTitle("Gaming Statistics")
