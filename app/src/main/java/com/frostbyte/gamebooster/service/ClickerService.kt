@@ -94,16 +94,19 @@ class ClickerService : AccessibilityService() {
         private const val GUARD_DEBOUNCE_MS = 300L
     }
 
-    private val main = Handler(Looper.getMainLooper())
+    internal val main = Handler(Looper.getMainLooper())
     // A tap loop must never be able to crash the whole app (a crash = the clicker vanishes mid-game).
     private val safety = CoroutineExceptionHandler { _, _ -> }
     private fun newScope() = CoroutineScope(SupervisorJob() + Dispatchers.Main + safety)
-    private var scope = newScope()
+    internal var scope = newScope()
     private var foregroundOn = false
     private var sessionOn = false
     private var wakeLock: PowerManager.WakeLock? = null
     private val jobs = ArrayList<Job>()
-    private lateinit var wm: WindowManager
+    internal lateinit var wm: WindowManager
+
+    /** The macro recorder/player ("Tiny Task"). Shares this service's overlays, shield and keep-alive. */
+    val macro = MacroEngine(this)
 
     private var controls: View? = null
     private var controlsLp: WindowManager.LayoutParams? = null
@@ -143,16 +146,23 @@ class ClickerService : AccessibilityService() {
      *  Before, that left you with no controls. Now the saved session brings back the controls, the numbered markers,
      *  the taps and (only if the screen is off) the shield. After a reboot or 14 h it stays quiet. */
     private fun restoreSession() {
-        if (!Prefs.clickerSession(this)) return
-        sessionOn = true
+        val clicker = Prefs.clickerSession(this)
+        val macroOn = Prefs.macroSession(this)
+        if (!clicker && !macroOn) return
         // 1) Shield first: it is a single view and the most important thing to get back on screen quickly.
         //    AFK keeps the screen lit, so a lit screen proves nothing; the shield was armed on purpose.
         //    (A reboot is already ruled out by the session check; holding the pill 5 s still turns it off.)
         if (Prefs.clickerArmed(this)) addShield(quiet = true)
-        // 2) Controls + markers, 3) taps.
-        showControls()
-        if (Prefs.clickerRunning(this)) startClicking(quiet = true)
-        toast("FrostByte restored your Auto Clicker")
+        // 2) Clicker controls + markers + taps.
+        if (clicker) {
+            sessionOn = true
+            showControls()
+            if (Prefs.clickerRunning(this)) startClicking(quiet = true)
+        }
+        // 3) Macro bar, and the loop if it was running.
+        if (macroOn) macro.restore()
+        bumpShield()   // the shield goes back on top of the controls it was covering before
+        toast("FrostByte restored your ${if (macroOn && !clicker) "Macro recorder" else "Auto Clicker"}")
     }
 
     /** Android 11+ remembers why our process last died. Saved so the Auto Clicker screen can show the real cause. */
@@ -184,7 +194,7 @@ class ClickerService : AccessibilityService() {
      *  processes (never a force-stop, never the app on screen) so Android frees RAM from them instead of from us. */
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
-        if (level < 10 || !sessionOn || !Prefs.boostFreeRam(this)) return   // 10 = RUNNING_LOW
+        if (level < 10 || !(sessionOn || macro.barVisible) || !Prefs.boostFreeRam(this)) return   // 10 = RUNNING_LOW
         val now = SystemClock.elapsedRealtime()
         if (now - lastTrimClear < 60_000L) return
         lastTrimClear = now
@@ -217,6 +227,7 @@ class ClickerService : AccessibilityService() {
     /** Removes everything we put on screen and stops all work. Only touches saved state when [forgetSession]. */
     private fun teardown(forgetSession: Boolean) {
         if (!::wm.isInitialized) return
+        macro.teardown(forgetSession)
         stopClickingInternal(persist = false)
         removeShield(persist = false)
         removeAllViews()
@@ -233,8 +244,10 @@ class ClickerService : AccessibilityService() {
     }
 
     private fun removeAllViews() {
-        watchdog?.cancel()
-        watchdog = null
+        if (!macro.barVisible) {
+            watchdog?.cancel()
+            watchdog = null
+        }
         markers.values.forEach { try { wm.removeView(it) } catch (_: Exception) { } }
         markers.clear()
         controls?.let { try { wm.removeView(it) } catch (_: Exception) { } }
@@ -248,7 +261,7 @@ class ClickerService : AccessibilityService() {
 
     /** A foreground notification raises this process's priority, so Android kills it far later than a plain background
      *  service when a big game fills the RAM. This is the main thing that stops the clicker from disappearing. */
-    private fun startKeepAlive() {
+    internal fun startKeepAlive() {
         if (foregroundOn) return
         try {
             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -301,6 +314,32 @@ class ClickerService : AccessibilityService() {
         wakeLock = null
     }
 
+    // ------------------------------------------------------------------ helpers shared with the macro recorder
+
+    internal fun hasShield(): Boolean = shield != null
+
+    internal fun removeShieldForMacro() = removeShield(persist = true)
+
+    /** Playing a macro and the Auto Clicker both tap the screen, so only one of them runs at a time. */
+    internal fun stopClickerForMacro() {
+        if (running) stopClicking()
+    }
+
+    /** Re-adds the shield on top of everything else, so controls added after it can never be pressed by a ghost touch. */
+    internal fun bumpShield() {
+        val sh = shield ?: return
+        val lp = sh.layoutParams ?: return
+        try {
+            wm.removeView(sh)
+            wm.addView(sh, lp)
+        } catch (_: Exception) { }
+    }
+
+    /** The keep-alive notification stays while either the clicker controls or the macro bar are on screen. */
+    internal fun maybeStopKeepAlive() {
+        if (!sessionOn && !macro.barVisible) stopKeepAlive()
+    }
+
     // ------------------------------------------------------------------ public API (called from the FrostByte app)
 
     fun showControls() {
@@ -316,11 +355,11 @@ class ClickerService : AccessibilityService() {
     /** The user pressed \u2715 / Hide: stop everything AND forget the session so it doesn't come back by itself. */
     fun hideAll() {
         stopClickingInternal(persist = true)
-        removeShield(persist = true)
-        removeAllViews()
-        stopKeepAlive()
-        releaseWake()
+        if (!macro.barVisible) removeShield(persist = true)   // a shield the macro is using stays on
         sessionOn = false
+        removeAllViews()
+        maybeStopKeepAlive()
+        releaseWake()
         Prefs.setClickerSession(this, false)
     }
 
@@ -344,6 +383,7 @@ class ClickerService : AccessibilityService() {
 
     private fun startClicking(quiet: Boolean = false) {
         if (running) return
+        if (macro.busy) macro.stopAll("Macro stopped")
         val active = ClickerStore.all(this).filter { it.enabled && it.placed }
         if (active.isEmpty()) {
             toast("Turn on a clicker in FrostByte and place its marker first")
@@ -473,18 +513,18 @@ class ClickerService : AccessibilityService() {
 
     // ------------------------------------------------------------------ overlays
 
-    private fun overlayFlags(extra: Int = 0): Int =
+    internal fun overlayFlags(extra: Int = 0): Int =
         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
             WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or extra
 
     @Suppress("DEPRECATION")
-    private fun screenSize(): Pair<Int, Int> {
+    internal fun screenSize(): Pair<Int, Int> {
         val dm = DisplayMetrics()
         wm.defaultDisplay.getRealMetrics(dm)
         return dm.widthPixels to dm.heightPixels
     }
 
-    private fun pill(): GradientDrawable = GradientDrawable().apply {
+    internal fun pill(): GradientDrawable = GradientDrawable().apply {
         setColor(Color.argb(215, 6, 12, 24))
         cornerRadius = dp(16).toFloat()
         setStroke(dp(1), Color.argb(130, 56, 208, 255))
@@ -622,7 +662,7 @@ class ClickerService : AccessibilityService() {
 
     // ------------------------------------------------------------------ touch shield (blocks ghost touches)
 
-    private fun toggleShield() {
+    internal fun toggleShield() {
         if (shield != null) removeShield() else addShield()
     }
 
@@ -722,7 +762,7 @@ class ClickerService : AccessibilityService() {
         startIdlePulse(v)
     }
 
-    private fun setShieldTouchable(passThrough: Boolean) {
+    internal fun setShieldTouchable(passThrough: Boolean) {
         val s = shield ?: return
         val lp = s.layoutParams as? WindowManager.LayoutParams ?: return
         lp.flags = if (passThrough) lp.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
@@ -778,7 +818,7 @@ class ClickerService : AccessibilityService() {
 
     /** Every few seconds, quietly put back anything the system tore down: the control bar, the numbered markers, the
      *  shield, and the tap loops. Cheap (a few view checks), runs only while the clicker session is on. */
-    private fun startWatchdog() {
+    internal fun startWatchdog() {
         if (watchdog?.isActive == true) return
         watchdog = scope.launch {
             while (isActive) {
@@ -789,21 +829,26 @@ class ClickerService : AccessibilityService() {
     }
 
     private fun heal() {
-        if (!::wm.isInitialized || !sessionOn) return
+        if (!::wm.isInitialized) return
+        macro.heal()
+        if (!sessionOn && !macro.barVisible) return
 
-        val c = controls
-        if (c == null || !c.isAttachedToWindow) {
-            if (c != null) try { wm.removeView(c) } catch (_: Exception) { }
-            controls = null
-            controlsLp = null
-            buildControls(quiet = true)
-            updatePlayButton()
-        }
+        if (sessionOn) {
+            val c = controls
+            if (c == null || !c.isAttachedToWindow) {
+                if (c != null) try { wm.removeView(c) } catch (_: Exception) { }
+                controls = null
+                controlsLp = null
+                buildControls(quiet = true)
+                updatePlayButton()
+                bumpShield()
+            }
 
-        val wanted = ClickerStore.all(this).count { it.enabled }
-        if (controls != null && (markers.size != wanted || markers.values.any { !it.isAttachedToWindow })) {
-            refreshMarkers()
-            applyMarkerMode()
+            val wanted = ClickerStore.all(this).count { it.enabled }
+            if (controls != null && (markers.size != wanted || markers.values.any { !it.isAttachedToWindow })) {
+                refreshMarkers()
+                applyMarkerMode()
+            }
         }
 
         if (Prefs.clickerArmed(this)) {
@@ -814,14 +859,16 @@ class ClickerService : AccessibilityService() {
             }
         }
 
-        val needsLoop = ClickerStore.all(this).any { it.enabled && it.placed && it.mode == ClickTarget.MODE_REPEAT }
-        if (running && needsLoop && jobs.none { it.isActive }) {
-            stopClickingInternal(persist = false)
-            startClicking(quiet = true)
+        if (sessionOn) {
+            val needsLoop = ClickerStore.all(this).any { it.enabled && it.placed && it.mode == ClickTarget.MODE_REPEAT }
+            if (running && needsLoop && jobs.none { it.isActive }) {
+                stopClickingInternal(persist = false)
+                startClicking(quiet = true)
+            }
         }
     }
 
-    private fun toast(msg: String) {
+    internal fun toast(msg: String) {
         main.post { Toast.makeText(applicationContext, msg, Toast.LENGTH_LONG).show() }
     }
 }
