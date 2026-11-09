@@ -38,6 +38,7 @@ import com.frostbyte.gamebooster.ui.GamesScreen
 import com.frostbyte.gamebooster.ui.GhostTouchScreen
 import com.frostbyte.gamebooster.ui.HistoryScreen
 import com.frostbyte.gamebooster.ui.HomeScreen
+import com.frostbyte.gamebooster.ui.MacroScreen
 import com.frostbyte.gamebooster.ui.PerformanceScreen
 import com.frostbyte.gamebooster.ui.SettingsScreen
 import com.frostbyte.gamebooster.ui.theme.Frost
@@ -65,7 +66,7 @@ private val tabs = listOf(
 @Composable
 fun FrostByteApp() {
     var selected by remember { mutableIntStateOf(0) }
-    var sub by remember { mutableStateOf<String?>(null) }   // "afk" | "manager" | "clicker" | "ghost"
+    var sub by remember { mutableStateOf<String?>(null) }   // "afk" | "manager" | "clicker" | "ghost" | "macro"
     BackHandler(enabled = sub != null) { sub = null }
     Scaffold(
         containerColor = Frost.Bg,
@@ -95,6 +96,7 @@ fun FrostByteApp() {
                 "manager" -> AppManagerScreen { sub = null }
                 "clicker" -> AutoClickerScreen { sub = null }
                 "ghost" -> GhostTouchScreen { sub = null }
+                "macro" -> MacroScreen { sub = null }
                 else -> when (selected) {
                     0 -> HomeScreen(
                         onOpenGames = { selected = 1 },
@@ -102,6 +104,7 @@ fun FrostByteApp() {
                         onOpenManager = { sub = "manager" },
                         onOpenClicker = { sub = "clicker" },
                         onOpenGhost = { sub = "ghost" },
+                        onOpenMacro = { sub = "macro" },
                     )
                     1 -> GamesScreen()
                     2 -> PerformanceScreen()
