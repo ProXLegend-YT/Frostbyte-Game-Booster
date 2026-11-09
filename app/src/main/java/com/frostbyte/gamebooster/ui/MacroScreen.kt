@@ -1,5 +1,7 @@
 package com.frostbyte.gamebooster.ui
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,6 +27,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,8 +38,13 @@ import androidx.compose.ui.unit.sp
 import com.frostbyte.gamebooster.data.MacroStore
 import com.frostbyte.gamebooster.data.Prefs
 import com.frostbyte.gamebooster.service.ClickerService
+import com.frostbyte.gamebooster.service.Priv
+import com.frostbyte.gamebooster.service.RootTouch
 import com.frostbyte.gamebooster.system.Perms
 import com.frostbyte.gamebooster.ui.theme.Frost
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** "Tiny Task for your phone": record touches, replay them, loop them. The controls float over your game. */
 @Composable
@@ -48,9 +56,16 @@ fun MacroScreen(onBack: () -> Unit) {
     val barOn = remember(resume, version) { ClickerService.instance?.macro?.barVisible == true }
     val saved = remember(resume, version) { MacroStore.load(context) }
     val battOk = remember(resume) { Perms.batteryUnrestricted(context) }
+    val shInstalled = remember(resume, version) { Priv.shizukuInstalled(context) }
+    val shRunning = remember(resume, version) { Priv.shizukuRunning() }
+    val shGranted = remember(resume, version) { Priv.shizukuGranted() }
     var gap by remember { mutableFloatStateOf(Prefs.macroGapSec(context).toFloat()) }
     var speed by remember { mutableFloatStateOf(Prefs.macroSpeed(context)) }
     var forward by remember { mutableStateOf(Prefs.macroForward(context)) }
+    var liveOn by remember { mutableStateOf(Prefs.macroLive(context)) }
+    var rootMsg by remember { mutableStateOf<String?>(null) }
+    var checking by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -118,6 +133,74 @@ fun MacroScreen(onBack: () -> Unit) {
 
         GlassCard(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Live recording (works like Tiny Task)", color = Frost.Text, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    "You tap \u25CF, then just use your phone: your touches work normally in the game while every tap, hold and " +
+                        "swipe is recorded as it happens. Android does not let a normal app watch touches that go to another app, so " +
+                        "this needs either root, or the free Shizuku app (no root: it uses Android's Wireless debugging). Without " +
+                        "either, the recorder uses capture mode, where your touches are recorded but can't reach the game while recording.",
+                    color = Frost.Muted, fontSize = 12.sp,
+                )
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Use live recording when root or Shizuku is available", color = Frost.Text, fontSize = 13.sp, modifier = Modifier.weight(1f).padding(end = 8.dp))
+                    Switch(
+                        checked = liveOn,
+                        onCheckedChange = { liveOn = it; Prefs.setMacroLive(context, it) },
+                        colors = SwitchDefaults.colors(checkedThumbColor = Frost.Bg, checkedTrackColor = Frost.Cyan),
+                    )
+                }
+                Text("No root? Use Shizuku", color = Frost.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
+                when {
+                    shGranted -> Text("\u2713 Shizuku is ready: live recording works without root.", color = Frost.Good, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    !shInstalled -> {
+                        Text(
+                            "1) Install Shizuku (free). 2) Open it and choose \u201cStart via Wireless debugging\u201d (you need to be on Wi-Fi). 3) Come back here and allow FrostByte.",
+                            color = Frost.Muted, fontSize = 12.sp,
+                        )
+                        Button(
+                            onClick = {
+                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://shizuku.rikka.app/download/")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Frost.Cyan, contentColor = Frost.Bg),
+                        ) { Text("Get Shizuku", fontWeight = FontWeight.Bold) }
+                    }
+                    !shRunning -> {
+                        Text(
+                            "Shizuku is installed but not started. Open it, choose \u201cStart via Wireless debugging\u201d, follow its steps, then come back here. It has to be started again after every restart of the phone.",
+                            color = Frost.Muted, fontSize = 12.sp,
+                        )
+                        Button(
+                            onClick = { context.packageManager.getLaunchIntentForPackage(Priv.SHIZUKU_PKG)?.let { context.startActivity(it) } },
+                            colors = ButtonDefaults.buttonColors(containerColor = Frost.Cyan, contentColor = Frost.Bg),
+                        ) { Text("Open Shizuku", fontWeight = FontWeight.Bold) }
+                    }
+                    else -> {
+                        Text("Shizuku is running. Allow FrostByte to use it:", color = Frost.Muted, fontSize = 12.sp)
+                        Button(
+                            onClick = { Priv.requestShizuku() },
+                            colors = ButtonDefaults.buttonColors(containerColor = Frost.Cyan, contentColor = Frost.Bg),
+                        ) { Text("Allow FrostByte in Shizuku", fontWeight = FontWeight.Bold) }
+                    }
+                }
+                OutlinedButton(
+                    enabled = !checking,
+                    onClick = {
+                        checking = true
+                        rootMsg = "Checking access: allow it if a prompt appears\u2026"
+                        scope.launch {
+                            val r = withContext(Dispatchers.IO) { RootTouch.prepare() }
+                            checking = false
+                            ClickerService.instance?.macro?.resetRootCheck()
+                            rootMsg = if (r.panel != null) "\u2713 Live recording is ready (${if (r.panel.shizuku) "Shizuku" else "root"}). Touch screen: ${r.panel.path}" else "\u2717 ${r.error}"
+                        }
+                    },
+                ) { Text(if (checking) "Checking\u2026" else "Check live recording", color = Frost.Cyan, fontSize = 12.sp) }
+                rootMsg?.let { Text(it, color = if (it.startsWith("\u2713")) Frost.Good else Frost.Warm, fontSize = 12.sp) }
+            }
+        }
+
+        GlassCard(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Your recording", color = Frost.Text, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 if (saved == null) {
                     Text("Nothing recorded yet. Show the bar, tap \u25CF, and do your touches.", color = Frost.Muted, fontSize = 12.sp)
@@ -163,10 +246,10 @@ fun MacroScreen(onBack: () -> Unit) {
                 }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f).padding(end = 8.dp)) {
-                        Text("Let touches reach the game while recording", color = Frost.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Capture mode only: send touches to the game after you lift", color = Frost.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                         Text(
-                            "Each touch is sent to the game right after you lift your finger, so menus move on while you record. " +
-                                "While it is being sent the red tint disappears; wait for it to come back before your next touch.",
+                            "Only used when live recording isn\u2019t available. Each touch is replayed into the game right after you lift your finger " +
+                                "so menus can move on. While it is being sent the red tint disappears; wait for it to come back.",
                             color = Frost.Muted, fontSize = 11.sp,
                         )
                     }
@@ -184,6 +267,7 @@ fun MacroScreen(onBack: () -> Unit) {
                 Text("Good to know", color = Frost.Text, fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 Text(
                     "\u2022 It records one finger: taps, long holds and swipes. Two-finger gestures aren't recorded.\n" +
+                        "\u2022 Touches on the recorder bar itself are never recorded.\n" +
                         "\u2022 Playback stops by itself if the screen turns off. While it plays, the screen is kept on.\n" +
                         "\u2022 Play it in the same screen orientation you recorded in.\n" +
                         "\u2022 The shield blocks ghost touches while it waits; it opens a tiny hole only for each recorded touch.\n" +

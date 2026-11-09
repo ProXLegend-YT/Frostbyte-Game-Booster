@@ -113,6 +113,8 @@ fun AutoClickerScreen(onBack: () -> Unit) {
             }
         }
 
+        FishingCard()
+
         for (i in 0 until ClickerStore.COUNT) {
             ClickerCard(i, version) {
                 version++
@@ -215,4 +217,72 @@ private fun ClickerCard(index: Int, version: Int, onChanged: () -> Unit) {
             )
         }
     }
+}
+
+
+/** Hold key + fast-tap key loop (made for fishing minigames: hold to cast, tap fast to reel, repeat). */
+@Composable
+private fun FishingCard() {
+    val context = LocalContext.current
+    var on by remember { mutableStateOf(Prefs.fishMode(context)) }
+    var hold by remember { mutableFloatStateOf(Prefs.fishHoldMs(context) / 1000f) }
+    var wait by remember { mutableFloatStateOf(Prefs.fishWaitMs(context) / 1000f) }
+    var rate by remember { mutableFloatStateOf(Prefs.fishRate(context).toFloat()) }
+    var burst by remember { mutableFloatStateOf(Prefs.fishBurstMs(context) / 1000f) }
+    var pause by remember { mutableFloatStateOf(Prefs.fishPauseMs(context) / 1000f) }
+
+    GlassCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Fishing loop (hold + fast tap)", color = Frost.Text, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        "Clicker 1 is your HOLD key (cast). Clicker 2 is your FAST-TAP key (reel). Turn both clickers on, drag " +
+                            "marker 1 onto the cast button and marker 2 onto the reel button, then press \u25B6 on the bar. " +
+                            "It holds, waits, taps fast, pauses, and repeats until you press \u25A0.",
+                        color = Frost.Muted, fontSize = 11.sp,
+                    )
+                }
+                Switch(
+                    checked = on,
+                    onCheckedChange = { on = it; Prefs.setFishMode(context, it) },
+                    colors = SwitchDefaults.colors(checkedThumbColor = Frost.Bg, checkedTrackColor = Frost.Cyan),
+                )
+            }
+            if (on) {
+                FishSlider("Hold the cast key for", "%.1f s".format(hold), hold, 0.2f..5f, 47) {
+                    hold = it; Prefs.setFishHoldMs(context, (it * 1000).toInt())
+                }
+                FishSlider("Wait after letting go (until the tap prompt shows)", "%.0f s".format(wait), wait, 0f..20f, 19) {
+                    wait = it; Prefs.setFishWaitMs(context, (it * 1000).toInt())
+                }
+                FishSlider("Fast-tap speed", "${rate.toInt()} taps per second", rate, 2f..15f, 12) {
+                    rate = it; Prefs.setFishRate(context, it.toInt())
+                }
+                FishSlider("Keep tapping for", "%.0f s".format(burst), burst, 1f..30f, 28) {
+                    burst = it; Prefs.setFishBurstMs(context, (it * 1000).toInt())
+                }
+                FishSlider("Pause before the next cast", "%.0f s".format(pause), pause, 0f..20f, 19) {
+                    pause = it; Prefs.setFishPauseMs(context, (it * 1000).toInt())
+                }
+                Text(
+                    "Tip: tune the hold time by watching the charge meter on your first casts. Games may not allow automation: use it at your own risk.",
+                    color = Frost.Muted, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FishSlider(label: String, valueText: String, value: Float, range: ClosedFloatingPointRange<Float>, steps: Int, onDone: (Float) -> Unit) {
+    var v by remember(value) { mutableFloatStateOf(value) }
+    Text("$label: $valueText", color = Frost.Text, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
+    Slider(
+        value = v,
+        onValueChange = { v = it; onDone(it) },
+        valueRange = range,
+        steps = steps,
+        colors = SliderDefaults.colors(thumbColor = Frost.Cyan, activeTrackColor = Frost.Cyan, inactiveTrackColor = Frost.CardEdge),
+    )
 }
