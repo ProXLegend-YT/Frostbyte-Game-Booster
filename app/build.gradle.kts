@@ -51,5 +51,9 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-core")
 
+    // Shizuku: lets FrostByte read your real touches through Android's Wireless debugging (no root needed)
+    implementation("dev.rikka.shizuku:api:12.2.0")
+    implementation("dev.rikka.shizuku:provider:12.2.0")
+
     testImplementation("junit:junit:4.13.2")
 }
